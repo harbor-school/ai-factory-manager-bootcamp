@@ -102,7 +102,23 @@ If the project requires environment variables:
 3. Set environment variables using `vercel env add` or suggest the user set them in the Vercel dashboard.
 4. For sensitive values, recommend the Vercel dashboard rather than CLI.
 
-### Step 5: Deploy to Production
+### Step 5: Environment Variable Local Sync
+
+배포 후 환경변수를 로컬에도 동기화한다:
+
+1. `vercel env pull .env.local` 실행하여 development 스코프 환경변수를 로컬에 가져온다.
+   - production 전용으로 설정된 변수가 있으면 development 스코프에도 추가한 뒤 다시 pull한다.
+2. `.env.example` 파일을 생성한다:
+   - `.env.local`에 있는 모든 키를 포함하되, 값은 플레이스홀더로 대체한다.
+   - `VERCEL_` prefix 변수는 Vercel 자동 생성이므로 제외한다.
+   - 예시:
+     ```
+     DATABASE_URL=postgresql://user:password@host:6543/postgres
+     JWT_SECRET=your-jwt-secret
+     ```
+3. `.gitignore`에 `.env.local`이 포함되어 있는지 확인하고, 없으면 추가한다.
+
+### Step 6: Deploy to Production
 
 1. Once all configuration and auth are confirmed, execute: `vercel --prod`
 2. Monitor the deployment output for errors.
