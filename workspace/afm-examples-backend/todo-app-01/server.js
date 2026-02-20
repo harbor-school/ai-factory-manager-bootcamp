@@ -8,14 +8,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'todo-app-01-secret-key';
 
-// DB Pool
+// DB Pool (trim to avoid trailing newline/whitespace in env vars)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: (process.env.DATABASE_URL || '').trim(),
   ssl: { rejectUnauthorized: false },
 });
 
-// Table initialization
+// Lazy DB initialization (cold-start aware for serverless)
+let dbInitialized = false;
 async function initDB() {
+  if (dbInitialized) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS todo_app_01_users (
       id SERIAL PRIMARY KEY,
@@ -33,12 +35,24 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  dbInitialized = true;
   console.log('DB tables ready');
 }
 
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+// Lazy DB init middleware for API routes
+app.use('/api', async (_req, res, next) => {
+  try {
+    await initDB();
+    next();
+  } catch (err) {
+    console.error('DB init failed:', err.message);
+    res.status(500).json({ success: false, message: 'Database initialization failed' });
+  }
+});
 
 // Auth middleware
 function auth(req, res, next) {
@@ -169,16 +183,12 @@ app.delete('/api/todos/:id', auth, async (req, res) => {
 });
 
 // SPA fallback
-app.get('/{*splat}', (req, res) => {
+app.get('/{*splat}', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start
-initDB()
-  .then(() => {
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-  })
-  .catch((err) => {
-    console.error('DB init failed:', err.message);
-    process.exit(1);
-  });
+// Local dev: start server / Vercel: export app
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+}
+module.exports = app;

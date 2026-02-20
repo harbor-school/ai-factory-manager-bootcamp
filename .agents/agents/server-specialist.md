@@ -81,11 +81,17 @@ Before finalizing any `server.js` code, mentally verify:
 - [ ] JSON responses follow the consistent structure
 - [ ] In-memory data structures are initialized properly
 - [ ] The port is configurable via `process.env.PORT` with a sensible default (e.g., 3000)
-- [ ] No additional files are created or required
+- [ ] `module.exports = app` 으로 export되어 Vercel 서버리스에서 사용 가능
+- [ ] `if (require.main === module)` 으로 로컬/서버리스 듀얼 모드 지원
+- [ ] DB 사용 시 lazy init 패턴 적용 (cold start 대응)
+- [ ] 환경변수에 `.trim()` 적용 (trailing newline 방지)
+- [ ] Express 5 사용 시 wildcard 라우트는 `/{*splat}` 문법 사용
+- [ ] No additional files are created or required (단, vercel.json은 예외)
 
 ## Common Patterns You Should Apply
 
-### Basic Express Setup
+### Basic Express Setup (Local + Vercel Dual-Mode)
+모든 server.js는 로컬 `node server.js`와 Vercel 서버리스 양쪽에서 작동해야 한다.
 ```javascript
 const express = require('express');
 const path = require('path');
@@ -95,7 +101,64 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ... routes ...
+
+// SPA fallback (Express 5 문법)
+app.get('/{*splat}', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Local: start server / Vercel: export app
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+}
+module.exports = app;
+```
+
+### DB 연결 시 Lazy Init 패턴
+서버리스 환경에서는 cold start마다 initDB가 호출될 수 있으므로 flag로 중복 실행을 방지한다.
+```javascript
+let dbInitialized = false;
+async function initDB() {
+  if (dbInitialized) return;
+  // CREATE TABLE IF NOT EXISTS ...
+  dbInitialized = true;
+}
+
+// API 라우트 앞에 미들웨어로 적용
+app.use('/api', async (_req, res, next) => {
+  try {
+    await initDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Database initialization failed' });
+  }
+});
+```
+
+### DATABASE_URL 환경변수 처리
+Vercel 등 플랫폼에서 환경변수에 trailing newline이 붙는 경우가 있으므로 반드시 `.trim()` 적용:
+```javascript
+const pool = new Pool({
+  connectionString: (process.env.DATABASE_URL || '').trim(),
+  ssl: { rejectUnauthorized: false },
+});
+```
+
+### vercel.json 기본 구성
+server.js가 있는 프로젝트에는 항상 이 형태의 vercel.json을 함께 생성한다:
+```json
+{
+  "version": 2,
+  "builds": [
+    { "src": "server.js", "use": "@vercel/node" },
+    { "src": "index.html", "use": "@vercel/static" }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/server.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
 ```
 
 ### In-Memory Data Store
