@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, createContext, useContext } = React;
+
+    // --- Auth Context ---
+    const AuthContext = createContext();
+
+    function AuthProvider({ children }) {
+      const [token, setToken] = useState(localStorage.getItem('token'));
+      const [user, setUser] = useState(() => {
+        const saved = localStorage.getItem('user');
+        return saved ? JSON.parse(saved) : null;
+      });
+
+      function login(token, user) {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        setToken(token);
+        setUser(user);
+      }
+
+      function logout() {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+      }
+
+      return (
+        <AuthContext.Provider value={{ token, user, login, logout }}>
+          {children}
+        </AuthContext.Provider>
+      );
+    }
+
+    function useAuth() {
+      return useContext(AuthContext);
+    }
+
+    // --- API Helper ---
+    function useApiCall() {
+      const { token, logout } = useAuth();
+
+      return async function apiCall(url, options = {}) {
+        const headers = { 'Content-Type': 'application/json', ...options.headers };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(url, { ...options, headers });
+        if (res.status === 401) {
+          logout();
+          throw new Error('Session expired');
+        }
+        return res.json();
+      };
+    }
+
+    // --- Auth Page ---
+    function AuthPage() {
+      const [isLogin, setIsLogin] = useState(true);
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+      const { login } = useAuth();
+
+      async function handleSubmit(e) {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+          const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+          const data = await res.json();
+          if (!data.success) {
+            setError(data.message);
+          } else {
+            login(data.data.token, data.data.user);
+          }
+        } catch {
+          setError('Server error');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm">
+            <h1 className="text-2xl font-bold text-center mb-6">
+              {isLogin ? 'Login' : 'Register'}
+            </h1>
+            {error && (
+              <div className="bg-red-100 text-red-700 p-2 rounded mb-4 text-sm">{error}</div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                required
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 disabled:opacity-50"
+              >
+                {loading ? '...' : isLogin ? 'Login' : 'Register'}
+              </button>
+            </form>
+            <p className="text-center text-sm text-gray-500 mt-4">
+              {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
+              <button
+                onClick={() => { setIsLogin(!isLogin); setError(''); }}
+                className="text-blue-500 hover:underline"
+              >
+                {isLogin ? 'Register' : 'Login'}
+              </button>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Todo Page ---
+    function TodoPage() {
+      const { user, logout } = useAuth();
+      const apiCall = useApiCall();
+      const [todos, setTodos] = useState([]);
+      const [title, setTitle] = useState('');
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        loadTodos();
+      }, []);
+
+      async function loadTodos() {
+        try {
+          const data = await apiCall('/api/todos');
+          if (data.success) setTodos(data.data);
+        } catch {}
+        setLoading(false);
+      }
+
+      async function addTodo(e) {
+        e.preventDefault();
+        if (!title.trim()) return;
+        try {
+          const data = await apiCall('/api/todos', {
+            method: 'POST',
+            body: JSON.stringify({ title: title.trim() }),
+          });
+          if (data.success) {
+            setTodos([data.data, ...todos]);
+            setTitle('');
+          }
+        } catch {}
+      }
+
+      async function toggleTodo(todo) {
+        try {
+          const data = await apiCall(`/api/todos/${todo.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ completed: !todo.completed }),
+          });
+          if (data.success) {
+            setTodos(todos.map((t) => (t.id === todo.id ? data.data : t)));
+          }
+        } catch {}
+      }
+
+      async function deleteTodo(id) {
+        try {
+          const data = await apiCall(`/api/todos/${id}`, { method: 'DELETE' });
+          if (data.success) {
+            setTodos(todos.filter((t) => t.id !== id));
+          }
+        } catch {}
+      }
+
+      return (
+        <div className="min-h-screen">
+          <header className="bg-white shadow">
+            <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+              <h1 className="text-xl font-bold">Todo App</h1>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600">{user.username}</span>
+                <button
+                  onClick={logout}
+                  className="text-sm text-red-500 hover:underline"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-2xl mx-auto px-4 py-6">
+            <form onSubmit={addTodo} className="flex gap-2 mb-6">
+              <input
+                type="text"
+                placeholder="What needs to be done?"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+              <button
+                type="submit"
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              >
+                Add
+              </button>
+            </form>
+
+            {loading ? (
+              <p className="text-center text-gray-500">Loading...</p>
+            ) : todos.length === 0 ? (
+              <p className="text-center text-gray-400">No todos yet</p>
+            ) : (
+              <ul className="space-y-2">
+                {todos.map((todo) => (
+                  <li
+                    key={todo.id}
+                    className="bg-white p-3 rounded shadow flex items-center gap-3"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={todo.completed}
+                      onChange={() => toggleTodo(todo)}
+                      className="h-4 w-4"
+                    />
+                    <span
+                      className={`flex-1 ${
+                        todo.completed ? 'line-through text-gray-400' : ''
+                      }`}
+                    >
+                      {todo.title}
+                    </span>
+                    <button
+                      onClick={() => deleteTodo(todo.id)}
+                      className="text-red-400 hover:text-red-600 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // --- App ---
+    function App() {
+      const { token } = useAuth();
+      return token ? <TodoPage /> : <AuthPage />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    );
+  </script>
+</body>
+</html>
