@@ -1,0 +1,1 @@
+../../.agents/agents/react-single-file-dev.md
