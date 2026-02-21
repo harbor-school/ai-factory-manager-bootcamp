@@ -11,10 +11,10 @@ Output:
 > A lightweight async standup tool where team members post daily updates visible to the whole team.
 
 ## Requirements
-- Team members post a daily status update (what they did, what they're doing, blockers)
-- All updates visible in a single feed, filterable by person and date
-- Slack integration: reminder to post, and new posts forwarded to a Slack channel
-- Works on mobile browser without install
+- [ ] 1. Team members post a daily status update (what they did, what they're doing, blockers)
+- [ ] 2. All updates visible in a single feed, filterable by person and date
+- [ ] 3. Slack integration: reminder to post, and new posts forwarded to a Slack channel
+- [ ] 4. Works on mobile browser without install
 
 ## Constraints
 - Team size: 5-15 people

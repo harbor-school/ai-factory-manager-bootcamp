@@ -3,14 +3,14 @@
 > 포트폴리오용 풀기능 당근마켓 클론 — CDN React + Express + PostgreSQL, Vercel 배포
 
 ## Requirements
-- [x] JWT 기반 회원가입/로그인 (기존 dangun_01 패턴 재사용)
-- [ ] 상품 CRUD (제목, 설명, 가격, 이미지 다중 업로드, 카테고리, 판매상태)
-- [ ] 이미지 업로드: 클라이언트 → Express 서버 → Supabase Storage (Service Role Key)
-- [ ] 브라우저 Geolocation API로 좌표 획득, 최초 1회 동네 등록
-- [ ] 좌표 기반 반경 필터링으로 내 동네 상품만 조회
-- [ ] 1:1 채팅: Short Polling (2~3초) 기반, 서버 API로 메시지 송수신
-- [ ] 매너온도: 거래 완료 후 상호 평가, 평균 점수 누적
-- [ ] 거래 상태 관리 (판매중 → 예약중 → 거래완료)
+- [x] 1. JWT 기반 회원가입/로그인 (기존 dangun_01 패턴 재사용)
+- [ ] 2. 상품 CRUD (제목, 설명, 가격, 이미지 다중 업로드, 카테고리, 판매상태)
+- [ ] 3. 이미지 업로드: 클라이언트 → Express 서버 → Supabase Storage (Service Role Key)
+- [ ] 4. 브라우저 Geolocation API로 좌표 획득, 최초 1회 동네 등록
+- [ ] 5. 좌표 기반 반경 필터링으로 내 동네 상품만 조회
+- [ ] 6. 1:1 채팅: Short Polling (2~3초) 기반, 서버 API로 메시지 송수신
+- [ ] 7. 매너온도: 거래 완료 후 상호 평가, 평균 점수 누적
+- [ ] 8. 거래 상태 관리 (판매중 → 예약중 → 거래완료)
 
 ## Constraints
 - 프론트엔드: CDN 기반 React 단일 HTML (빌드 도구 없음)
