@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>동네장터</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#FF6F0F',
+            'primary-dark': '#E55B00',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
+    .tab-active { color: #FF6F0F; border-color: #FF6F0F; }
+  </style>
+</head>
+<body class="max-w-md mx-auto bg-white min-h-screen flex flex-col">
+
+  <!-- Auth Screen -->
+  <div id="auth-screen" class="flex-1 flex flex-col">
+    <!-- Header -->
+    <div class="pt-16 pb-8 px-6 text-center">
+      <div class="text-6xl mb-4">🥕</div>
+      <h1 class="text-2xl font-bold text-gray-900">동네장터</h1>
+      <p class="text-gray-500 mt-1">내 근처에서 만나는 중고거래</p>
+    </div>
+
+    <!-- Tab Toggle -->
+    <div class="flex border-b mx-6">
+      <button id="tab-login" onclick="switchAuthTab('login')" class="flex-1 py-3 text-sm font-semibold border-b-2 tab-active">로그인</button>
+      <button id="tab-register" onclick="switchAuthTab('register')" class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-400">회원가입</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" class="px-6 pt-6 flex flex-col gap-3" onsubmit="handleLogin(event)">
+      <input id="login-username" type="text" placeholder="아이디" autocomplete="username"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+      <input id="login-password" type="password" placeholder="비밀번호" autocomplete="current-password"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+      <button type="submit" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark mt-2">로그인</button>
+    </form>
+
+    <!-- Register Form -->
+    <form id="register-form" class="px-6 pt-6 flex flex-col gap-3 hidden" onsubmit="handleRegister(event)">
+      <input id="reg-username" type="text" placeholder="아이디" autocomplete="username"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+      <input id="reg-password" type="password" placeholder="비밀번호" autocomplete="new-password"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+      <input id="reg-nickname" type="text" placeholder="닉네임"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+      <select id="reg-location"
+        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary text-gray-700">
+        <option value="서울시 강남구">서울시 강남구</option>
+        <option value="서울시 서초구">서울시 서초구</option>
+        <option value="서울시 송파구">서울시 송파구</option>
+        <option value="서울시 마포구">서울시 마포구</option>
+        <option value="서울시 용산구">서울시 용산구</option>
+        <option value="서울시 성동구">서울시 성동구</option>
+        <option value="서울시 광진구">서울시 광진구</option>
+        <option value="서울시 종로구">서울시 종로구</option>
+        <option value="서울시 중구">서울시 중구</option>
+        <option value="경기도 성남시">경기도 성남시</option>
+        <option value="경기도 수원시">경기도 수원시</option>
+        <option value="부산시 해운대구">부산시 해운대구</option>
+      </select>
+      <button type="submit" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark mt-2">가입하기</button>
+    </form>
+
+    <!-- Error Message -->
+    <p id="auth-error" class="text-red-500 text-xs text-center mt-3 px-6 hidden"></p>
+  </div>
+
+  <!-- Main Screen (hidden until login) -->
+  <div id="main-screen" class="flex-1 flex flex-col hidden">
+    <!-- Top Header -->
+    <header class="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
+      <div class="flex items-center gap-1">
+        <span class="text-lg">🥕</span>
+        <h1 id="header-location" class="text-base font-bold text-gray-900">서울시 강남구</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="header-nickname" class="text-sm text-gray-600"></span>
+        <button onclick="logout()" class="text-xs text-gray-400 hover:text-red-500">로그아웃</button>
+      </div>
+    </header>
+
+    <!-- Content Area -->
+    <div class="flex-1 overflow-y-auto">
+      <!-- Home Tab -->
+      <div id="page-home" class="p-4">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold">중고거래</h2>
+        </div>
+        <div class="flex flex-col items-center justify-center py-20 text-gray-400">
+          <div class="text-5xl mb-4">📦</div>
+          <p class="text-sm">아직 등록된 상품이 없어요</p>
+          <p class="text-xs mt-1">Phase 2에서 상품 CRUD가 추가됩니다</p>
+        </div>
+      </div>
+
+      <!-- Profile Tab -->
+      <div id="page-profile" class="p-4 hidden">
+        <h2 class="text-lg font-bold mb-4">내 프로필</h2>
+        <div class="bg-gray-50 rounded-2xl p-5">
+          <div class="flex items-center gap-4 mb-5">
+            <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-2xl">🧑</div>
+            <div>
+              <p id="profile-nickname" class="font-bold text-gray-900"></p>
+              <p id="profile-username" class="text-xs text-gray-400"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 mb-4 text-sm text-gray-600">
+            <span>📍</span>
+            <span id="profile-location"></span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-gray-600">
+            <span>📅</span>
+            <span id="profile-date"></span>
+          </div>
+        </div>
+
+        <!-- Edit Profile -->
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3">프로필 수정</h3>
+          <form id="profile-form" class="flex flex-col gap-3" onsubmit="handleProfileUpdate(event)">
+            <input id="edit-nickname" type="text" placeholder="닉네임"
+              class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+            <select id="edit-location"
+              class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary text-gray-700">
+              <option value="서울시 강남구">서울시 강남구</option>
+              <option value="서울시 서초구">서울시 서초구</option>
+              <option value="서울시 송파구">서울시 송파구</option>
+              <option value="서울시 마포구">서울시 마포구</option>
+              <option value="서울시 용산구">서울시 용산구</option>
+              <option value="서울시 성동구">서울시 성동구</option>
+              <option value="서울시 광진구">서울시 광진구</option>
+              <option value="서울시 종로구">서울시 종로구</option>
+              <option value="서울시 중구">서울시 중구</option>
+              <option value="경기도 성남시">경기도 성남시</option>
+              <option value="경기도 수원시">경기도 수원시</option>
+              <option value="부산시 해운대구">부산시 해운대구</option>
+            </select>
+            <button type="submit" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark">저장</button>
+            <p id="profile-msg" class="text-xs text-center hidden"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Tab Bar -->
+    <nav class="flex border-t bg-white sticky bottom-0">
+      <button onclick="switchTab('home')" id="btn-home" class="flex-1 flex flex-col items-center py-2 text-primary">
+        <span class="text-xl">🏠</span>
+        <span class="text-[10px] mt-0.5 font-semibold">홈</span>
+      </button>
+      <button onclick="switchTab('profile')" id="btn-profile" class="flex-1 flex flex-col items-center py-2 text-gray-400">
+        <span class="text-xl">👤</span>
+        <span class="text-[10px] mt-0.5">내 프로필</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg hidden z-50"></div>
+
+<script>
+// --- State ---
+let token = localStorage.getItem('dangun_token');
+let currentUser = null;
+
+// --- API Helper ---
+async function api(method, url, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || '요청 실패');
+  return data;
+}
+
+// --- Toast ---
+function toast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `fixed top-4 left-1/2 -translate-x-1/2 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg z-50 ${isError ? 'bg-red-500' : 'bg-gray-800'}`;
+  setTimeout(() => el.classList.add('hidden'), 2000);
+}
+
+// --- Auth ---
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('login-form').classList.toggle('hidden', !isLogin);
+  document.getElementById('register-form').classList.toggle('hidden', isLogin);
+  document.getElementById('tab-login').classList.toggle('tab-active', isLogin);
+  document.getElementById('tab-register').classList.toggle('tab-active', !isLogin);
+  document.getElementById('tab-login').classList.toggle('text-gray-400', !isLogin);
+  document.getElementById('tab-register').classList.toggle('text-gray-400', isLogin);
+  document.getElementById('tab-login').classList.toggle('border-transparent', !isLogin);
+  document.getElementById('tab-register').classList.toggle('border-transparent', isLogin);
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) return showAuthError('아이디와 비밀번호를 입력해주세요');
+  try {
+    const res = await api('POST', '/api/auth/login', { username, password });
+    token = res.data.token;
+    localStorage.setItem('dangun_token', token);
+    currentUser = res.data.user;
+    showMainScreen();
+    toast(`${currentUser.nickname}님 환영합니다!`);
+  } catch (err) {
+    showAuthError(err.message);
+  }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const nickname = document.getElementById('reg-nickname').value.trim();
+  const location = document.getElementById('reg-location').value;
+  if (!username || !password || !nickname) return showAuthError('모든 항목을 입력해주세요');
+  if (password.length < 4) return showAuthError('비밀번호는 4자 이상 입력해주세요');
+  try {
+    const res = await api('POST', '/api/auth/register', { username, password, nickname });
+    // 가입 후 동네 설정
+    token = res.data.token;
+    localStorage.setItem('dangun_token', token);
+    if (location !== '서울시 강남구') {
+      await api('PUT', '/api/auth/profile', { location });
+    }
+    currentUser = { ...res.data.user, location };
+    showMainScreen();
+    toast('가입 완료! 동네장터에 오신 걸 환영합니다');
+  } catch (err) {
+    showAuthError(err.message);
+  }
+}
+
+function logout() {
+  token = null;
+  currentUser = null;
+  localStorage.removeItem('dangun_token');
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('main-screen').classList.add('hidden');
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  switchAuthTab('login');
+}
+
+// --- Main Screen ---
+function showMainScreen() {
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('main-screen').classList.remove('hidden');
+  document.getElementById('header-nickname').textContent = currentUser.nickname;
+  document.getElementById('header-location').textContent = currentUser.location || '동네 설정';
+  renderProfile();
+  switchTab('home');
+}
+
+function switchTab(tab) {
+  document.getElementById('page-home').classList.toggle('hidden', tab !== 'home');
+  document.getElementById('page-profile').classList.toggle('hidden', tab !== 'profile');
+  document.getElementById('btn-home').classList.toggle('text-primary', tab === 'home');
+  document.getElementById('btn-home').classList.toggle('text-gray-400', tab !== 'home');
+  document.getElementById('btn-profile').classList.toggle('text-primary', tab === 'profile');
+  document.getElementById('btn-profile').classList.toggle('text-gray-400', tab !== 'profile');
+}
+
+// --- Profile ---
+function renderProfile() {
+  if (!currentUser) return;
+  document.getElementById('profile-nickname').textContent = currentUser.nickname;
+  document.getElementById('profile-username').textContent = '@' + currentUser.username;
+  document.getElementById('profile-location').textContent = currentUser.location || '미설정';
+  document.getElementById('profile-date').textContent = currentUser.created_at
+    ? new Date(currentUser.created_at).toLocaleDateString('ko-KR') + ' 가입'
+    : '';
+  document.getElementById('edit-nickname').value = currentUser.nickname;
+  document.getElementById('edit-location').value = currentUser.location || '서울시 강남구';
+}
+
+async function handleProfileUpdate(e) {
+  e.preventDefault();
+  const nickname = document.getElementById('edit-nickname').value.trim();
+  const location = document.getElementById('edit-location').value;
+  if (!nickname) return toast('닉네임을 입력해주세요', true);
+  try {
+    const res = await api('PUT', '/api/auth/profile', { nickname, location });
+    currentUser = { ...currentUser, ...res.data };
+    document.getElementById('header-nickname').textContent = currentUser.nickname;
+    document.getElementById('header-location').textContent = currentUser.location;
+    renderProfile();
+    const msg = document.getElementById('profile-msg');
+    msg.textContent = '저장되었습니다 ✓';
+    msg.className = 'text-xs text-center text-green-600';
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+    toast('프로필이 수정되었습니다');
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// --- Init ---
+(async function init() {
+  if (!token) return;
+  try {
+    const res = await api('GET', '/api/auth/me');
+    currentUser = res.data;
+    showMainScreen();
+  } catch {
+    logout();
+  }
+})();
+</script>
+</body>
+</html>
