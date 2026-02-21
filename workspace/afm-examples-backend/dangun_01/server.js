@@ -34,7 +34,11 @@ async function initDB() {
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+
+// Serve static files only in local dev (Vercel handles this via builds config)
+if (require.main === module) {
+  app.use(express.static(path.join(__dirname)));
+}
 
 app.use('/api', async (_req, res, next) => {
   try {
@@ -148,10 +152,12 @@ app.put('/api/auth/profile', auth, async (req, res) => {
   }
 });
 
-// SPA fallback
-app.get('/{*splat}', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// SPA fallback -- only in local dev (Vercel uses rewrites in vercel.json)
+if (require.main === module) {
+  app.get('/{*splat}', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  });
+}
 
 if (require.main === module) {
   app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
