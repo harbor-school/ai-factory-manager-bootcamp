@@ -67,7 +67,7 @@ Produce the brief. Format:
 > [One-line summary of what this is]
 
 ## Requirements
-- [Concrete, testable requirements]
+- [ ] [Concrete, testable requirements]
 
 ## Constraints
 - [Hard limits and boundaries]
