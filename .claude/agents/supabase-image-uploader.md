@@ -1,0 +1,1 @@
+../../.agents/agents/supabase-image-uploader.md

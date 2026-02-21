@@ -21,26 +21,25 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; }
     .tab-active { color: #FF6F0F; border-color: #FF6F0F; }
+    .category-pill { scroll-snap-align: start; }
+    .img-carousel { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+    .img-carousel > div { scroll-snap-align: start; }
+    .status-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
   </style>
 </head>
 <body class="max-w-md mx-auto bg-white min-h-screen flex flex-col">
 
   <!-- Auth Screen -->
   <div id="auth-screen" class="flex-1 flex flex-col">
-    <!-- Header -->
     <div class="pt-16 pb-8 px-6 text-center">
       <div class="text-6xl mb-4">🥕</div>
       <h1 class="text-2xl font-bold text-gray-900">동네장터</h1>
       <p class="text-gray-500 mt-1">내 근처에서 만나는 중고거래</p>
     </div>
-
-    <!-- Tab Toggle -->
     <div class="flex border-b mx-6">
       <button id="tab-login" onclick="switchAuthTab('login')" class="flex-1 py-3 text-sm font-semibold border-b-2 tab-active">로그인</button>
       <button id="tab-register" onclick="switchAuthTab('register')" class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-400">회원가입</button>
     </div>
-
-    <!-- Login Form -->
     <form id="login-form" class="px-6 pt-6 flex flex-col gap-3" onsubmit="handleLogin(event)">
       <input id="login-username" type="text" placeholder="아이디" autocomplete="username"
         class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
@@ -48,8 +47,6 @@
         class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
       <button type="submit" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark mt-2">로그인</button>
     </form>
-
-    <!-- Register Form -->
     <form id="register-form" class="px-6 pt-6 flex flex-col gap-3 hidden" onsubmit="handleRegister(event)">
       <input id="reg-username" type="text" placeholder="아이디" autocomplete="username"
         class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
@@ -74,15 +71,13 @@
       </select>
       <button type="submit" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark mt-2">가입하기</button>
     </form>
-
-    <!-- Error Message -->
     <p id="auth-error" class="text-red-500 text-xs text-center mt-3 px-6 hidden"></p>
   </div>
 
-  <!-- Main Screen (hidden until login) -->
+  <!-- Main Screen -->
   <div id="main-screen" class="flex-1 flex flex-col hidden">
     <!-- Top Header -->
-    <header class="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
+    <header id="main-header" class="flex items-center justify-between px-4 py-3 border-b bg-white sticky top-0 z-10">
       <div class="flex items-center gap-1">
         <span class="text-lg">🥕</span>
         <h1 id="header-location" class="text-base font-bold text-gray-900">서울시 강남구</h1>
@@ -93,18 +88,85 @@
       </div>
     </header>
 
+    <!-- Sub Header (for detail/form pages) -->
+    <header id="sub-header" class="hidden items-center px-4 py-3 border-b bg-white sticky top-0 z-10">
+      <button onclick="goBack()" class="text-gray-600 mr-3">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </button>
+      <h1 id="sub-header-title" class="text-base font-bold text-gray-900"></h1>
+    </header>
+
     <!-- Content Area -->
     <div class="flex-1 overflow-y-auto">
-      <!-- Home Tab -->
+
+      <!-- Home: Product List -->
       <div id="page-home" class="p-4">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg font-bold">중고거래</h2>
         </div>
-        <div class="flex flex-col items-center justify-center py-20 text-gray-400">
-          <div class="text-5xl mb-4">📦</div>
-          <p class="text-sm">아직 등록된 상품이 없어요</p>
-          <p class="text-xs mt-1">Phase 2에서 상품 CRUD가 추가됩니다</p>
+        <!-- Category Filter -->
+        <div class="flex gap-2 overflow-x-auto pb-3 mb-2 -mx-4 px-4" id="category-tabs" style="scrollbar-width:none;-ms-overflow-style:none;">
         </div>
+        <!-- Product List -->
+        <div id="product-list"></div>
+      </div>
+
+      <!-- Product Detail -->
+      <div id="page-product-detail" class="hidden">
+        <div id="detail-content"></div>
+      </div>
+
+      <!-- Product Form -->
+      <div id="page-product-form" class="hidden p-4">
+        <!-- Image Upload -->
+        <div class="mb-4">
+          <label class="text-sm font-semibold text-gray-700 mb-2 block">사진 (최대 5장)</label>
+          <div class="flex gap-2 overflow-x-auto pb-2" id="image-preview-area">
+            <label id="image-add-btn" class="w-20 h-20 flex-shrink-0 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-primary">
+              <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span class="text-[10px] text-gray-400 mt-1" id="image-count">0/5</span>
+              <input type="file" accept="image/*" multiple class="hidden" id="image-input" onchange="handleImageSelect(event)" />
+            </label>
+          </div>
+        </div>
+        <form id="product-form" class="flex flex-col gap-3" onsubmit="handleProductSubmit(event)">
+          <input id="form-title" type="text" placeholder="글 제목" maxlength="100"
+            class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary" />
+          <select id="form-category"
+            class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary text-gray-700">
+            <option value="디지털기기">디지털기기</option>
+            <option value="생활가전">생활가전</option>
+            <option value="가구/인테리어">가구/인테리어</option>
+            <option value="생활/주방">생활/주방</option>
+            <option value="유아동">유아동</option>
+            <option value="여성의류">여성의류</option>
+            <option value="남성의류">남성의류</option>
+            <option value="뷰티/미용">뷰티/미용</option>
+            <option value="스포츠/레저">스포츠/레저</option>
+            <option value="취미/게임/음반">취미/게임/음반</option>
+            <option value="도서">도서</option>
+            <option value="반려동물용품">반려동물용품</option>
+            <option value="식물">식물</option>
+            <option value="기타" selected>기타</option>
+          </select>
+          <div class="relative">
+            <input id="form-price" type="number" placeholder="가격" min="0"
+              class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary pr-10" />
+            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
+          </div>
+          <textarea id="form-description" placeholder="게시글 내용을 작성해주세요.&#10;(상품 상태, 거래 방법 등)" rows="5"
+            class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary resize-none"></textarea>
+          <!-- Status (only for edit) -->
+          <div id="form-status-wrap" class="hidden">
+            <label class="text-sm font-semibold text-gray-700 mb-1 block">판매 상태</label>
+            <div class="flex gap-2">
+              <button type="button" onclick="selectStatus('판매중')" data-status="판매중" class="status-btn flex-1 py-2 rounded-xl text-sm font-semibold border-2 border-primary text-primary bg-primary/5">판매중</button>
+              <button type="button" onclick="selectStatus('예약중')" data-status="예약중" class="status-btn flex-1 py-2 rounded-xl text-sm font-semibold border-2 border-gray-200 text-gray-500">예약중</button>
+              <button type="button" onclick="selectStatus('거래완료')" data-status="거래완료" class="status-btn flex-1 py-2 rounded-xl text-sm font-semibold border-2 border-gray-200 text-gray-500">거래완료</button>
+            </div>
+          </div>
+          <button type="submit" id="form-submit-btn" class="w-full py-3 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark mt-1">작성 완료</button>
+        </form>
       </div>
 
       <!-- Profile Tab -->
@@ -126,6 +188,12 @@
             <span>📅</span>
             <span id="profile-date"></span>
           </div>
+        </div>
+
+        <!-- My Products -->
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3">내 판매 목록</h3>
+          <div id="my-product-list"></div>
         </div>
 
         <!-- Edit Profile -->
@@ -156,8 +224,13 @@
       </div>
     </div>
 
+    <!-- FAB: Add Product -->
+    <button id="fab-add" onclick="openProductForm()" class="fixed bottom-20 right-4 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-primary-dark z-20" style="max-width:calc(448px - 16px);right:max(16px, calc((100vw - 448px)/2 + 16px))">
+      +
+    </button>
+
     <!-- Bottom Tab Bar -->
-    <nav class="flex border-t bg-white sticky bottom-0">
+    <nav id="bottom-tabs" class="flex border-t bg-white sticky bottom-0">
       <button onclick="switchTab('home')" id="btn-home" class="flex-1 flex flex-col items-center py-2 text-primary">
         <span class="text-xl">🏠</span>
         <span class="text-[10px] mt-0.5 font-semibold">홈</span>
@@ -173,9 +246,20 @@
   <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg hidden z-50"></div>
 
 <script>
+// --- Constants ---
+const CATEGORIES = ['전체','디지털기기','생활가전','가구/인테리어','생활/주방','유아동','여성의류','남성의류','뷰티/미용','스포츠/레저','취미/게임/음반','도서','반려동물용품','식물','기타'];
+const MAX_IMAGES = 5;
+
 // --- State ---
 let token = localStorage.getItem('dangun_token');
 let currentUser = null;
+let currentPage = 'home';
+let pageHistory = [];
+let selectedCategory = '전체';
+let editingProduct = null;
+let formImages = []; // Supabase public URLs
+let formSelectedStatus = '판매중';
+let products = [];
 
 // --- API Helper ---
 async function api(method, url, body) {
@@ -197,6 +281,55 @@ function toast(msg, isError = false) {
   el.textContent = msg;
   el.className = `fixed top-4 left-1/2 -translate-x-1/2 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg z-50 ${isError ? 'bg-red-500' : 'bg-gray-800'}`;
   setTimeout(() => el.classList.add('hidden'), 2000);
+}
+
+// --- Helpers ---
+function timeAgo(dateStr) {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diff = Math.floor((now - date) / 1000);
+  if (diff < 60) return '방금 전';
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}일 전`;
+  return date.toLocaleDateString('ko-KR');
+}
+
+function formatPrice(price) {
+  return parseInt(price).toLocaleString() + '원';
+}
+
+function statusColor(status) {
+  if (status === '예약중') return 'bg-green-100 text-green-700';
+  if (status === '거래완료') return 'bg-gray-200 text-gray-500';
+  return '';
+}
+
+// --- Image Compression ---
+function compressImage(file, maxWidth = 800, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // --- Auth ---
@@ -246,7 +379,6 @@ async function handleRegister(e) {
   if (password.length < 4) return showAuthError('비밀번호는 4자 이상 입력해주세요');
   try {
     const res = await api('POST', '/api/auth/register', { username, password, nickname });
-    // 가입 후 동네 설정
     token = res.data.token;
     localStorage.setItem('dangun_token', token);
     if (location !== '서울시 강남구') {
@@ -271,23 +403,374 @@ function logout() {
   switchAuthTab('login');
 }
 
-// --- Main Screen ---
+// --- Navigation ---
 function showMainScreen() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('main-screen').classList.remove('hidden');
   document.getElementById('header-nickname').textContent = currentUser.nickname;
   document.getElementById('header-location').textContent = currentUser.location || '동네 설정';
+  renderCategoryTabs();
   renderProfile();
-  switchTab('home');
+  navigateTo('home');
+}
+
+function navigateTo(page, data) {
+  if (currentPage !== page) {
+    pageHistory.push(currentPage);
+  }
+  currentPage = page;
+  showPage(page, data);
+}
+
+function goBack() {
+  const prev = pageHistory.pop() || 'home';
+  currentPage = prev;
+  showPage(prev);
+}
+
+function showPage(page, data) {
+  // Hide all pages
+  document.getElementById('page-home').classList.add('hidden');
+  document.getElementById('page-product-detail').classList.add('hidden');
+  document.getElementById('page-product-form').classList.add('hidden');
+  document.getElementById('page-profile').classList.add('hidden');
+
+  // Header toggling
+  const isSubPage = page === 'product-detail' || page === 'product-form';
+  document.getElementById('main-header').classList.toggle('hidden', isSubPage);
+  document.getElementById('main-header').classList.toggle('flex', !isSubPage);
+  document.getElementById('sub-header').classList.toggle('hidden', !isSubPage);
+  document.getElementById('sub-header').classList.toggle('flex', isSubPage);
+  document.getElementById('bottom-tabs').classList.toggle('hidden', isSubPage);
+  document.getElementById('fab-add').classList.toggle('hidden', isSubPage);
+
+  // Show target page
+  if (page === 'home') {
+    document.getElementById('page-home').classList.remove('hidden');
+    loadProducts();
+    updateTabButtons('home');
+  } else if (page === 'product-detail') {
+    document.getElementById('page-product-detail').classList.remove('hidden');
+    document.getElementById('sub-header-title').textContent = '';
+    if (data) renderProductDetail(data);
+  } else if (page === 'product-form') {
+    document.getElementById('page-product-form').classList.remove('hidden');
+    document.getElementById('sub-header-title').textContent = editingProduct ? '게시글 수정' : '내 물건 팔기';
+  } else if (page === 'profile') {
+    document.getElementById('page-profile').classList.remove('hidden');
+    renderProfile();
+    loadMyProducts();
+    updateTabButtons('profile');
+  }
 }
 
 function switchTab(tab) {
-  document.getElementById('page-home').classList.toggle('hidden', tab !== 'home');
-  document.getElementById('page-profile').classList.toggle('hidden', tab !== 'profile');
+  pageHistory = [];
+  currentPage = tab;
+  showPage(tab);
+}
+
+function updateTabButtons(tab) {
   document.getElementById('btn-home').classList.toggle('text-primary', tab === 'home');
   document.getElementById('btn-home').classList.toggle('text-gray-400', tab !== 'home');
   document.getElementById('btn-profile').classList.toggle('text-primary', tab === 'profile');
   document.getElementById('btn-profile').classList.toggle('text-gray-400', tab !== 'profile');
+}
+
+// --- Category Tabs ---
+function renderCategoryTabs() {
+  const container = document.getElementById('category-tabs');
+  container.innerHTML = CATEGORIES.map(cat => `
+    <button onclick="filterCategory('${cat}')"
+      class="category-pill flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
+        ${cat === selectedCategory ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+      ${cat}
+    </button>
+  `).join('');
+}
+
+function filterCategory(cat) {
+  selectedCategory = cat;
+  renderCategoryTabs();
+  loadProducts();
+}
+
+// --- Product List ---
+async function loadProducts() {
+  try {
+    const params = selectedCategory !== '전체' ? `?category=${encodeURIComponent(selectedCategory)}` : '';
+    const res = await api('GET', '/api/products' + params);
+    products = res.data;
+    renderProductList(products);
+  } catch (err) {
+    console.error('Load products error:', err);
+  }
+}
+
+function renderProductList(items) {
+  const container = document.getElementById('product-list');
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-20 text-gray-400">
+        <div class="text-5xl mb-4">📦</div>
+        <p class="text-sm">아직 등록된 상품이 없어요</p>
+        <p class="text-xs mt-1">첫 번째 상품을 등록해보세요!</p>
+      </div>`;
+    return;
+  }
+  container.innerHTML = items.map(p => {
+    const imgs = typeof p.images === 'string' ? JSON.parse(p.images) : (p.images || []);
+    const thumb = imgs.length > 0
+      ? `<img src="${imgs[0]}" class="w-full h-full object-cover" alt="" />`
+      : `<div class="w-full h-full bg-gray-100 flex items-center justify-center text-3xl text-gray-300">📷</div>`;
+    const badge = p.status !== '판매중'
+      ? `<span class="status-badge ${statusColor(p.status)} font-semibold">${p.status}</span>`
+      : '';
+    return `
+      <div onclick="openProductDetail(${p.id})" class="flex gap-4 py-4 border-b border-gray-100 cursor-pointer active:bg-gray-50">
+        <div class="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100">${thumb}</div>
+        <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <div>
+            <div class="flex items-center gap-1.5">
+              ${badge}
+              <h3 class="text-sm font-medium text-gray-900 truncate">${p.title}</h3>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">${p.location} · ${timeAgo(p.created_at)}</p>
+          </div>
+          <p class="text-[15px] font-bold text-gray-900">${formatPrice(p.price)}</p>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// --- Product Detail ---
+async function openProductDetail(id) {
+  try {
+    const res = await api('GET', `/api/products/${id}`);
+    navigateTo('product-detail', res.data);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function renderProductDetail(p) {
+  const imgs = typeof p.images === 'string' ? JSON.parse(p.images) : (p.images || []);
+  const isOwner = currentUser && currentUser.id === p.user_id;
+
+  let imageHTML;
+  if (imgs.length > 0) {
+    imageHTML = `
+      <div class="relative">
+        <div class="img-carousel flex overflow-x-auto" style="scrollbar-width:none;">
+          ${imgs.map((src, i) => `
+            <div class="w-full flex-shrink-0">
+              <img src="${src}" class="w-full h-72 object-cover" alt="상품 이미지 ${i + 1}" />
+            </div>
+          `).join('')}
+        </div>
+        ${imgs.length > 1 ? `<div class="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full">1/${imgs.length}</div>` : ''}
+      </div>`;
+  } else {
+    imageHTML = `<div class="w-full h-48 bg-gray-100 flex items-center justify-center text-5xl text-gray-300">📷</div>`;
+  }
+
+  const badge = p.status !== '판매중'
+    ? `<span class="inline-block status-badge ${statusColor(p.status)} font-semibold mb-2">${p.status}</span><br/>`
+    : '';
+
+  const ownerActions = isOwner ? `
+    <div class="flex gap-2 mt-4">
+      <button onclick="openEditProduct(${p.id})" class="flex-1 py-2.5 border-2 border-primary text-primary rounded-xl text-sm font-semibold hover:bg-primary/5">수정</button>
+      <button onclick="deleteProduct(${p.id})" class="flex-1 py-2.5 border-2 border-red-400 text-red-500 rounded-xl text-sm font-semibold hover:bg-red-50">삭제</button>
+    </div>` : '';
+
+  document.getElementById('detail-content').innerHTML = `
+    ${imageHTML}
+    <div class="p-4">
+      <!-- Seller Info -->
+      <div class="flex items-center gap-3 pb-4 border-b border-gray-100">
+        <div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-lg">🧑</div>
+        <div>
+          <p class="text-sm font-semibold text-gray-900">${p.nickname}</p>
+          <p class="text-xs text-gray-400">${p.location}</p>
+        </div>
+      </div>
+      <!-- Product Info -->
+      <div class="py-4">
+        ${badge}
+        <h2 class="text-lg font-bold text-gray-900">${p.title}</h2>
+        <p class="text-xs text-gray-400 mt-1">${p.category} · ${timeAgo(p.created_at)}</p>
+        <p class="text-xl font-bold text-gray-900 mt-3">${formatPrice(p.price)}</p>
+        <p class="text-sm text-gray-700 mt-4 whitespace-pre-wrap leading-relaxed">${p.description || ''}</p>
+      </div>
+      ${ownerActions}
+    </div>`;
+
+  // Image carousel indicator
+  if (imgs.length > 1) {
+    const carousel = document.querySelector('.img-carousel');
+    const indicator = document.querySelector('.img-carousel + div') || carousel.parentElement.querySelector('.absolute');
+    if (carousel && indicator) {
+      carousel.addEventListener('scroll', () => {
+        const idx = Math.round(carousel.scrollLeft / carousel.clientWidth) + 1;
+        indicator.textContent = `${idx}/${imgs.length}`;
+      });
+    }
+  }
+}
+
+async function deleteProduct(id) {
+  if (!confirm('정말 삭제하시겠습니까?')) return;
+  try {
+    await api('DELETE', `/api/products/${id}`);
+    toast('삭제되었습니다');
+    goBack();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// --- Product Form ---
+function openProductForm() {
+  editingProduct = null;
+  formImages = [];
+  formSelectedStatus = '판매중';
+  document.getElementById('form-title').value = '';
+  document.getElementById('form-category').value = '기타';
+  document.getElementById('form-price').value = '';
+  document.getElementById('form-description').value = '';
+  document.getElementById('form-status-wrap').classList.add('hidden');
+  document.getElementById('form-submit-btn').textContent = '작성 완료';
+  document.getElementById('image-input').value = '';
+  renderImagePreviews();
+  navigateTo('product-form');
+}
+
+async function openEditProduct(id) {
+  try {
+    const res = await api('GET', `/api/products/${id}`);
+    const p = res.data;
+    editingProduct = p;
+    formImages = typeof p.images === 'string' ? JSON.parse(p.images) : (p.images || []);
+    formSelectedStatus = p.status;
+    document.getElementById('form-title').value = p.title;
+    document.getElementById('form-category').value = p.category;
+    document.getElementById('form-price').value = p.price;
+    document.getElementById('form-description').value = p.description || '';
+    document.getElementById('form-status-wrap').classList.remove('hidden');
+    document.getElementById('form-submit-btn').textContent = '수정 완료';
+    selectStatus(p.status);
+    renderImagePreviews();
+    navigateTo('product-form');
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function selectStatus(status) {
+  formSelectedStatus = status;
+  document.querySelectorAll('.status-btn').forEach(btn => {
+    const isActive = btn.dataset.status === status;
+    btn.classList.toggle('border-primary', isActive);
+    btn.classList.toggle('text-primary', isActive);
+    btn.classList.toggle('bg-primary/5', isActive);
+    btn.classList.toggle('border-gray-200', !isActive);
+    btn.classList.toggle('text-gray-500', !isActive);
+  });
+}
+
+let uploadingCount = 0;
+
+async function handleImageSelect(e) {
+  const files = Array.from(e.target.files);
+  if (formImages.length + files.length > MAX_IMAGES) {
+    toast(`사진은 최대 ${MAX_IMAGES}장까지 가능합니다`, true);
+    e.target.value = '';
+    return;
+  }
+  e.target.value = '';
+
+  for (const file of files) {
+    try {
+      uploadingCount++;
+      renderImagePreviews();
+      const compressed = await compressImage(file);
+      const res = await api('POST', '/api/upload', { image: compressed });
+      formImages.push(res.data.url);
+    } catch (err) {
+      console.error('Image upload error:', err);
+      toast('이미지 업로드에 실패했습니다', true);
+    } finally {
+      uploadingCount--;
+    }
+  }
+  renderImagePreviews();
+}
+
+function removeImage(index) {
+  formImages.splice(index, 1);
+  renderImagePreviews();
+}
+
+function renderImagePreviews() {
+  const area = document.getElementById('image-preview-area');
+  const addBtn = document.getElementById('image-add-btn');
+  // Remove existing previews (keep add button)
+  area.querySelectorAll('.img-thumb').forEach(el => el.remove());
+  // Insert previews before add button
+  formImages.forEach((src, i) => {
+    const div = document.createElement('div');
+    div.className = 'img-thumb w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden relative';
+    div.innerHTML = `
+      <img src="${src}" class="w-full h-full object-cover" alt="" />
+      <button onclick="removeImage(${i})" class="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded-full text-xs flex items-center justify-center">&times;</button>
+      ${i === 0 ? '<span class="absolute bottom-0 left-0 right-0 bg-primary text-white text-[9px] text-center py-0.5">대표</span>' : ''}
+    `;
+    area.insertBefore(div, addBtn);
+  });
+  // Show uploading placeholders
+  for (let i = 0; i < uploadingCount; i++) {
+    const div = document.createElement('div');
+    div.className = 'img-thumb w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden relative bg-gray-100 flex items-center justify-center';
+    div.innerHTML = '<div class="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full"></div>';
+    area.insertBefore(div, addBtn);
+  }
+  const totalCount = formImages.length + uploadingCount;
+  document.getElementById('image-count').textContent = `${totalCount}/${MAX_IMAGES}`;
+  addBtn.classList.toggle('hidden', totalCount >= MAX_IMAGES);
+}
+
+async function handleProductSubmit(e) {
+  e.preventDefault();
+  const title = document.getElementById('form-title').value.trim();
+  const category = document.getElementById('form-category').value;
+  const price = document.getElementById('form-price').value;
+  const description = document.getElementById('form-description').value.trim();
+
+  if (!title) return toast('제목을 입력해주세요', true);
+  if (price === '' || price === undefined) return toast('가격을 입력해주세요', true);
+  if (uploadingCount > 0) return toast('이미지 업로드 중입니다. 잠시만 기다려주세요', true);
+
+  const body = { title, category, price: parseInt(price), description, images: formImages };
+
+  try {
+    if (editingProduct) {
+      body.status = formSelectedStatus;
+      await api('PUT', `/api/products/${editingProduct.id}`, body);
+      toast('수정되었습니다');
+    } else {
+      await api('POST', '/api/products', body);
+      toast('상품이 등록되었습니다');
+    }
+    // Go back to previous page
+    editingProduct = null;
+    formImages = [];
+    pageHistory = [];
+    currentPage = 'home';
+    showPage('home');
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 // --- Profile ---
@@ -303,6 +786,38 @@ function renderProfile() {
   document.getElementById('edit-location').value = currentUser.location || '서울시 강남구';
 }
 
+async function loadMyProducts() {
+  if (!currentUser) return;
+  try {
+    const res = await api('GET', `/api/products?user_id=${currentUser.id}`);
+    const container = document.getElementById('my-product-list');
+    const items = res.data;
+    if (items.length === 0) {
+      container.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">등록한 상품이 없습니다</p>';
+      return;
+    }
+    container.innerHTML = items.map(p => {
+      const imgs = typeof p.images === 'string' ? JSON.parse(p.images) : (p.images || []);
+      const thumb = imgs.length > 0
+        ? `<img src="${imgs[0]}" class="w-full h-full object-cover" alt="" />`
+        : `<div class="w-full h-full bg-gray-100 flex items-center justify-center text-lg text-gray-300">📷</div>`;
+      const badge = p.status !== '판매중'
+        ? `<span class="status-badge ${statusColor(p.status)} font-semibold">${p.status}</span> `
+        : '';
+      return `
+        <div onclick="openProductDetail(${p.id})" class="flex gap-3 py-3 border-b border-gray-100 cursor-pointer">
+          <div class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden">${thumb}</div>
+          <div class="flex-1 min-w-0 flex flex-col justify-between">
+            <p class="text-sm text-gray-900 truncate">${badge}${p.title}</p>
+            <p class="text-sm font-bold text-gray-900">${formatPrice(p.price)}</p>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    console.error('Load my products error:', err);
+  }
+}
+
 async function handleProfileUpdate(e) {
   e.preventDefault();
   const nickname = document.getElementById('edit-nickname').value.trim();
@@ -315,7 +830,7 @@ async function handleProfileUpdate(e) {
     document.getElementById('header-location').textContent = currentUser.location;
     renderProfile();
     const msg = document.getElementById('profile-msg');
-    msg.textContent = '저장되었습니다 ✓';
+    msg.textContent = '저장되었습니다';
     msg.className = 'text-xs text-center text-green-600';
     setTimeout(() => msg.classList.add('hidden'), 2000);
     toast('프로필이 수정되었습니다');
