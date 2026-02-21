@@ -262,6 +262,20 @@ Skip this step only if the skill being developed already exists, and iteration o
 
 When creating a new skill from scratch, always run the `init_skill.py` script. The script conveniently generates a new template skill directory that automatically includes everything a skill requires, making the skill creation process much more efficient and reliable.
 
+#### Skill Directory Convention
+
+Skills must be created in `.agents/skills/` (the source of truth) and symlinked to `.claude/skills/` (where Claude reads them from).
+
+```bash
+# 1. Initialize the skill in .agents/skills/
+scripts/init_skill.py <skill-name> --path .agents/skills
+
+# 2. Create a symlink in .claude/skills/ pointing to .agents/skills/
+ln -s ../../.agents/skills/<skill-name> .claude/skills/<skill-name>
+```
+
+This pattern keeps skill source files in `.agents/` (version-controlled, organized) while `.claude/skills/` contains only symlinks.
+
 Usage:
 
 ```bash
