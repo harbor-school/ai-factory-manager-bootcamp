@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>당근마켓</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            carrot: '#FF6F0F',
+            'carrot-light': '#FFF5EF',
+            'carrot-dark': '#E55A00',
+            'bg-primary': '#F8F8F8',
+            'text-primary': '#212121',
+            'text-secondary': '#868B94',
+            'text-tertiary': '#AAAAAA',
+            'border-color': '#EEEEEE',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: 0; background: #F8F8F8; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    input, textarea, select, button { font-family: inherit; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.25s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+    .slide-up { animation: slideUp 0.3s ease-out; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+    .toast-in { animation: toastIn 0.3s ease-out; }
+    .toast-out { animation: toastOut 0.3s ease-in forwards; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useContext, createContext, useRef, useCallback, useMemo } = React;
+
+    // ========================================
+    // Supabase Client
+    // ========================================
+    // TODO: 아래 값을 본인의 Supabase 프로젝트 정보로 교체하세요
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_KEY = 'YOUR_SUPABASE_PUBLISHABLE_KEY';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: 'gamja_02_auth',
+        flowType: 'implicit',
+      }
+    });
+
+    const BUCKET = 'gamja_02_images';
+    const PROFILES = 'gamja_02_profiles';
+    const PRODUCTS = 'gamja_02_products';
+
+    // ========================================
+    // Constants
+    // ========================================
+    const CATEGORIES = [
+      '디지털기기', '생활가전', '가구/인테리어', '유아동', '생활/가공식품',
+      '스포츠/레저', '여성의류', '남성의류', '게임/취미', '뷰티/미용'
+    ];
+
+    const STATUS_LABELS = {
+      '판매중': { variant: 'green', label: '판매중' },
+      '예약중': { variant: 'yellow', label: '예약중' },
+      '거래완료': { variant: 'gray', label: '거래완료' },
+    };
+
+    // ========================================
+    // Utility Functions
+    // ========================================
+    function formatPrice(price, isFree) {
+      if (isFree || price === 0 || price === null || price === undefined) return '나눔🧡';
+      return Number(price).toLocaleString('ko-KR') + '원';
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '';
+      const now = new Date();
+      const date = new Date(dateStr);
+      const diffMs = now - date;
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) return '방금 전';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}분 전`;
+      const diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) return `${diffHour}시간 전`;
+      const diffDay = Math.floor(diffHour / 24);
+      if (diffDay < 30) return `${diffDay}일 전`;
+      const diffMonth = Math.floor(diffDay / 30);
+      if (diffMonth < 12) return `${diffMonth}개월 전`;
+      return `${Math.floor(diffMonth / 12)}년 전`;
+    }
+
+    async function resizeImage(file, maxWidth = 1200) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadImage(file, userId) {
+      const resized = await resizeImage(file);
+      const ext = 'jpg';
+      const fileName = `${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { data, error } = await db.storage
+        .from(BUCKET)
+        .upload(fileName, resized, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+      const { data: urlData } = db.storage.from(BUCKET).getPublicUrl(fileName);
+      return urlData.publicUrl;
+    }
+
+    // ========================================
+    // Toast Context
+    // ========================================
+    const ToastContext = createContext();
+
+    function ToastProvider({ children }) {
+      const [toasts, setToasts] = useState([]);
+      const idRef = useRef(0);
+
+      const showToast = useCallback((message, type = 'error') => {
+        const id = ++idRef.current;
+        setToasts(prev => [...prev, { id, message, type, exiting: false }]);
+        setTimeout(() => {
+          setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
+          setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+          }, 300);
+        }, 3000);
+      }, []);
+
+      return (
+        <ToastContext.Provider value={showToast}>
+          {children}
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-[90%] max-w-[440px]">
+            {toasts.map(t => (
+              <div key={t.id} className={`${t.exiting ? 'toast-out' : 'toast-in'} px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium ${t.type === 'success' ? 'bg-green-500' : t.type === 'info' ? 'bg-blue-500' : 'bg-red-500'}`}>
+                {t.message}
+              </div>
+            ))}
+          </div>
+        </ToastContext.Provider>
+      );
+    }
+
+    function useToast() { return useContext(ToastContext); }
+
+    // ========================================
+    // Auth Context (Supabase Auth)
+    // ========================================
+    const AuthContext = createContext();
+
+    function AuthProvider({ children }) {
+      const [user, setUser] = useState(null);
+      const [profile, setProfile] = useState(null);
+      const [authLoading, setAuthLoading] = useState(true);
+
+      const fetchProfile = useCallback(async (userId) => {
+        if (!userId) return null;
+        const { data } = await db.from(PROFILES).select('*').eq('id', userId).single();
+        setProfile(data);
+        return data;
+      }, []);
+
+      useEffect(() => {
+        // 초기 세션 확인 (5초 타임아웃)
+        const timeout = setTimeout(() => {
+          console.warn('getSession timeout - proceeding without session');
+          setAuthLoading(false);
+        }, 5000);
+
+        db.auth.getSession().then(({ data: { session }, error }) => {
+          clearTimeout(timeout);
+          if (error) { console.error('getSession error:', error); setAuthLoading(false); return; }
+          if (session?.user) {
+            setUser(session.user);
+            fetchProfile(session.user.id).finally(() => setAuthLoading(false));
+          } else {
+            setAuthLoading(false);
+          }
+        }).catch(err => {
+          clearTimeout(timeout);
+          console.error('getSession exception:', err);
+          setAuthLoading(false);
+        });
+
+        // 세션 변경 감지
+        const { data: { subscription } } = db.auth.onAuthStateChange(async (event, session) => {
+          if (session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
+        });
+
+        return () => subscription.unsubscribe();
+      }, []);
+
+      const logout = useCallback(async () => {
+        await db.auth.signOut();
+        setUser(null);
+        setProfile(null);
+        window.location.hash = '#/';
+      }, []);
+
+      const refreshProfile = useCallback(() => {
+        if (user?.id) return fetchProfile(user.id);
+      }, [user, fetchProfile]);
+
+      const isLoggedIn = !!user;
+      const mergedUser = user && profile ? { ...user, ...profile, email: user.email } : (user ? { ...user } : null);
+
+      return (
+        <AuthContext.Provider value={{ user: mergedUser, rawUser: user, profile, isLoggedIn, authLoading, logout, fetchProfile, refreshProfile }}>
+          {children}
+        </AuthContext.Provider>
+      );
+    }
+
+    function useAuth() { return useContext(AuthContext); }
+
+    // ========================================
+    // Router
+    // ========================================
+    const RouterContext = createContext();
+
+    function Router({ children }) {
+      const [path, setPath] = useState(window.location.hash.slice(1) || '/');
+
+      useEffect(() => {
+        const handler = () => {
+          const newPath = window.location.hash.slice(1) || '/';
+          setPath(newPath);
+          window.scrollTo(0, 0);
+        };
+        window.addEventListener('hashchange', handler);
+        return () => window.removeEventListener('hashchange', handler);
+      }, []);
+
+      const navigate = useCallback((to) => {
+        window.location.hash = '#' + to;
+      }, []);
+
+      return (
+        <RouterContext.Provider value={{ path, navigate }}>
+          {children}
+        </RouterContext.Provider>
+      );
+    }
+
+    function useRouter() { return useContext(RouterContext); }
+
+    function matchRoute(pattern, path) {
+      const patternParts = pattern.split('/');
+      const pathParts = path.split('?')[0].split('/');
+      if (patternParts.length !== pathParts.length) return null;
+      const params = {};
+      for (let i = 0; i < patternParts.length; i++) {
+        if (patternParts[i].startsWith(':')) {
+          params[patternParts[i].slice(1)] = pathParts[i];
+        } else if (patternParts[i] !== pathParts[i]) {
+          return null;
+        }
+      }
+      return params;
+    }
+
+    function Routes({ children }) {
+      const { path } = useRouter();
+      const routes = React.Children.toArray(children);
+      for (const route of routes) {
+        const params = matchRoute(route.props.path, path);
+        if (params !== null) {
+          return React.cloneElement(route.props.element, { params });
+        }
+      }
+      return routes.find(r => r.props.path === '*')?.props.element || null;
+    }
+
+    function Route({ path, element }) { return null; }
+
+    function Link({ to, children, className, onClick }) {
+      const { navigate } = useRouter();
+      const handleClick = (e) => {
+        e.preventDefault();
+        if (onClick) onClick(e);
+        navigate(to);
+      };
+      return <a href={'#' + to} className={className} onClick={handleClick}>{children}</a>;
+    }
+
+    // ========================================
+    // SVG Icons
+    // ========================================
+    function IconHome({ active }) {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#FF6F0F' : '#868B94'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
+        </svg>
+      );
+    }
+
+    function IconSearch({ active }) {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#FF6F0F' : '#868B94'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
+        </svg>
+      );
+    }
+
+    function IconPlus({ active, color }) {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color || (active ? '#FF6F0F' : '#868B94')} strokeWidth="2.5" strokeLinecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    }
+
+    function IconPerson({ active }) {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? '#FF6F0F' : '#868B94'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+        </svg>
+      );
+    }
+
+    function IconCamera() {
+      return (
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+        </svg>
+      );
+    }
+
+    function IconHeart({ filled }) {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill={filled ? '#FF6F0F' : 'none'} stroke={filled ? '#FF6F0F' : '#AAAAAA'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+        </svg>
+      );
+    }
+
+    function IconEye() {
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    }
+
+    function IconBack() {
+      return (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#212121" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+      );
+    }
+
+    function IconLocation() {
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868B94" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+        </svg>
+      );
+    }
+
+    function IconChevronDown() {
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      );
+    }
+
+    function IconTrash() {
+      return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+        </svg>
+      );
+    }
+
+    function IconEdit() {
+      return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      );
+    }
+
+    function IconX() {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      );
+    }
+
+    function IconImage() {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        </svg>
+      );
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Spinner({ size = 'md', className = '' }) {
+      const sizes = { sm: 'w-4 h-4', md: 'w-8 h-8', lg: 'w-12 h-12' };
+      return (
+        <div className={`${sizes[size]} border-gray-200 border-t-carrot rounded-full spinner ${className}`}
+          style={{ borderWidth: size === 'sm' ? '2px' : '3px', borderStyle: 'solid' }} />
+      );
+    }
+
+    function LoadingScreen() {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex flex-col items-center gap-3">
+            <Spinner size="lg" />
+            <span className="text-text-secondary text-sm">불러오는 중...</span>
+          </div>
+        </div>
+      );
+    }
+
+    function Button({ variant = 'primary', size = 'md', disabled = false, onClick, children, className = '', type = 'button', fullWidth = false }) {
+      const variants = {
+        primary: 'bg-carrot text-white hover:bg-carrot-dark active:bg-carrot-dark disabled:bg-orange-200',
+        secondary: 'bg-white text-text-primary border border-border-color hover:bg-gray-50 active:bg-gray-100',
+        danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
+        ghost: 'bg-transparent text-text-secondary hover:bg-gray-100 active:bg-gray-200',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-xs rounded-lg',
+        md: 'px-4 py-2.5 text-sm rounded-xl',
+        lg: 'px-6 py-3.5 text-base rounded-xl',
+      };
+      return (
+        <button type={type} disabled={disabled} onClick={onClick}
+          className={`font-semibold transition-all duration-150 ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, type = 'text', value, onChange, placeholder, error, disabled, className = '', ...rest }) {
+      return (
+        <div className={`flex flex-col gap-1.5 ${className}`}>
+          {label && <label className="text-sm font-medium text-text-primary">{label}</label>}
+          <input type={type} value={value} onChange={onChange} placeholder={placeholder} disabled={disabled}
+            className={`w-full px-4 py-3 rounded-xl border ${error ? 'border-red-400 bg-red-50' : 'border-border-color bg-white'} text-text-primary text-sm placeholder-text-tertiary outline-none focus:border-carrot focus:ring-1 focus:ring-orange-100 transition-colors disabled:bg-gray-100 disabled:text-text-secondary`}
+            {...rest} />
+          {error && <span className="text-red-500 text-xs">{error}</span>}
+        </div>
+      );
+    }
+
+    function Textarea({ label, value, onChange, placeholder, error, disabled, rows = 5, className = '' }) {
+      return (
+        <div className={`flex flex-col gap-1.5 ${className}`}>
+          {label && <label className="text-sm font-medium text-text-primary">{label}</label>}
+          <textarea value={value} onChange={onChange} placeholder={placeholder} disabled={disabled} rows={rows}
+            className={`w-full px-4 py-3 rounded-xl border ${error ? 'border-red-400 bg-red-50' : 'border-border-color bg-white'} text-text-primary text-sm placeholder-text-tertiary outline-none focus:border-carrot focus:ring-1 focus:ring-orange-100 transition-colors resize-none disabled:bg-gray-100`} />
+          {error && <span className="text-red-500 text-xs">{error}</span>}
+        </div>
+      );
+    }
+
+    function Badge({ children, variant = 'default', className = '' }) {
+      const variants = {
+        default: 'bg-gray-100 text-text-secondary',
+        orange: 'bg-carrot-light text-carrot',
+        green: 'bg-green-100 text-green-700',
+        yellow: 'bg-yellow-100 text-yellow-700',
+        gray: 'bg-gray-200 text-gray-600',
+        red: 'bg-red-100 text-red-600',
+      };
+      return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${variants[variant]} ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative max-w-sm w-full bg-white rounded-t-2xl sm:rounded-2xl p-5 slide-up max-h-[80vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-text-primary">{title}</h3>
+              <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+                <IconX />
+              </button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function EmptyState({ icon, title, description }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+          <div className="text-4xl mb-4">{icon || '📦'}</div>
+          <h3 className="text-base font-semibold text-text-primary mb-1">{title}</h3>
+          {description && <p className="text-sm text-text-secondary text-center">{description}</p>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Manner Temperature Component
+    // ========================================
+    function MannerTemp({ temp = 36.5, showLabel = true, size = 'md' }) {
+      const t = Number(temp) || 36.5;
+      const percent = Math.min(Math.max(((t - 30) / 20) * 100, 5), 100);
+      let color = '#4CAF50';
+      let emoji = '😊';
+      if (t < 36) { color = '#2196F3'; emoji = '😐'; }
+      else if (t < 36.5) { color = '#4CAF50'; emoji = '🙂'; }
+      else if (t < 40) { color = '#FF9800'; emoji = '😊'; }
+      else if (t < 45) { color = '#FF6F0F'; emoji = '😄'; }
+      else { color = '#F44336'; emoji = '🤩'; }
+
+      const h = size === 'sm' ? 'h-2' : 'h-3';
+      return (
+        <div className="flex flex-col gap-1">
+          {showLabel && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-secondary">매너온도</span>
+              <span className="flex items-center gap-1">
+                <span className="text-sm font-bold" style={{ color }}>{t.toFixed(1)}&deg;C</span>
+                <span className="text-sm">{emoji}</span>
+              </span>
+            </div>
+          )}
+          <div className={`w-full ${h} bg-gray-200 rounded-full overflow-hidden`}>
+            <div className={`${h} rounded-full transition-all duration-500`}
+              style={{ width: `${percent}%`, backgroundColor: color }} />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Image Carousel Component
+    // ========================================
+    function ImageCarousel({ images = [] }) {
+      const [current, setCurrent] = useState(0);
+      const touchStart = useRef(0);
+      const touchEnd = useRef(0);
+
+      const imgs = images.length > 0 ? images : [];
+
+      if (imgs.length === 0) {
+        return (
+          <div className="w-full aspect-square bg-gray-100 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2 text-text-tertiary">
+              <IconCamera />
+              <span className="text-sm">이미지 없음</span>
+            </div>
+          </div>
+        );
+      }
+
+      const handleTouchStart = (e) => { touchStart.current = e.touches[0].clientX; };
+      const handleTouchMove = (e) => { touchEnd.current = e.touches[0].clientX; };
+      const handleTouchEnd = () => {
+        const diff = touchStart.current - touchEnd.current;
+        if (Math.abs(diff) > 50) {
+          if (diff > 0 && current < imgs.length - 1) setCurrent(c => c + 1);
+          if (diff < 0 && current > 0) setCurrent(c => c - 1);
+        }
+      };
+
+      return (
+        <div className="relative w-full aspect-square bg-gray-100 overflow-hidden"
+          onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+          <div className="flex transition-transform duration-300 h-full"
+            style={{ transform: `translateX(-${current * 100}%)` }}>
+            {imgs.map((img, i) => (
+              <img key={i} src={img} alt={`상품 이미지 ${i + 1}`}
+                className="w-full h-full object-cover flex-shrink-0"
+                onError={e => { e.target.style.display = 'none'; }} />
+            ))}
+          </div>
+          {imgs.length > 1 && (
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+              {imgs.map((_, i) => (
+                <button key={i} onClick={() => setCurrent(i)}
+                  className={`h-2 rounded-full transition-all ${i === current ? 'bg-white w-4' : 'bg-white/50 w-2'}`} />
+              ))}
+            </div>
+          )}
+          {imgs.length > 1 && (
+            <div className="absolute top-3 right-3 bg-black/40 text-white text-xs px-2 py-0.5 rounded-full">
+              {current + 1}/{imgs.length}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Product Card Component
+    // ========================================
+    function ProductCard({ product, onClick }) {
+      const p = product;
+      const thumbnail = p.images && p.images.length > 0 ? p.images[0] : null;
+      const statusInfo = STATUS_LABELS[p.status];
+
+      return (
+        <div className="flex gap-4 px-4 py-3 bg-white border-b border-border-color active:bg-gray-50 cursor-pointer transition-colors"
+          onClick={() => onClick && onClick(p.id)}>
+          <div className="w-[110px] h-[110px] rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 relative">
+            {thumbnail ? (
+              <img src={thumbnail} alt={p.title} className="w-full h-full object-cover"
+                onError={e => { e.target.style.display = 'none'; }} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <IconCamera />
+              </div>
+            )}
+            {p.status && p.status !== '판매중' && statusInfo && (
+              <div className="absolute top-1.5 left-1.5">
+                <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+            <div>
+              <h3 className="text-[15px] text-text-primary leading-snug line-clamp-2">{p.title}</h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {p.location_name || '위치 미설정'} · {timeAgo(p.created_at)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[15px] font-bold text-text-primary">
+                {formatPrice(p.price, p.is_free)}
+              </p>
+              <div className="flex items-center gap-2 mt-1 text-text-tertiary">
+                {p.view_count > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs">
+                    <IconEye />
+                    {p.view_count}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Bottom Navigation
+    // ========================================
+    function BottomNav() {
+      const { path, navigate } = useRouter();
+      const { isLoggedIn } = useAuth();
+      const showToast = useToast();
+
+      const currentTab = useMemo(() => {
+        if (path === '/' || path.startsWith('/?')) return 'home';
+        if (path === '/product/new') return 'write';
+        if (path === '/my') return 'my';
+        return 'home';
+      }, [path]);
+
+      const tabs = [
+        { id: 'home', label: '홈', icon: IconHome, to: '/' },
+        { id: 'write', label: '글쓰기', icon: IconPlus, to: '/product/new' },
+        { id: 'my', label: '나의 당근', icon: IconPerson, to: '/my' },
+      ];
+
+      const handleClick = (tab) => {
+        if ((tab.id === 'write' || tab.id === 'my') && !isLoggedIn) {
+          showToast('로그인이 필요합니다', 'error');
+          navigate('/login');
+          return;
+        }
+        if (tab.to) navigate(tab.to);
+      };
+
+      if (path === '/login' || path === '/signup') return null;
+
+      return (
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-border-color z-40">
+          <div className="flex items-center justify-around h-[56px] px-1">
+            {tabs.map(tab => {
+              const active = currentTab === tab.id;
+              const IconComp = tab.icon;
+              return (
+                <button key={tab.id} onClick={() => handleClick(tab)}
+                  className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full">
+                  <IconComp active={active} />
+                  <span className={`text-[10px] ${active ? 'text-carrot font-semibold' : 'text-text-secondary'}`}>
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+        </nav>
+      );
+    }
+
+    // ========================================
+    // Page: Login
+    // ========================================
+    function LoginPage() {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [loading, setLoading] = useState(false);
+      const { navigate } = useRouter();
+      const showToast = useToast();
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!email || !password) { showToast('이메일과 비밀번호를 입력해주세요'); return; }
+        setLoading(true);
+        try {
+          const { data, error } = await db.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          showToast('로그인 성공!', 'success');
+          navigate('/');
+        } catch (err) {
+          showToast(err.message || '로그인에 실패했습니다');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-white fade-in">
+          <div className="w-full max-w-[320px]">
+            <div className="text-center mb-10">
+              <h1 className="text-3xl font-extrabold text-carrot mb-1">당근마켓</h1>
+              <p className="text-sm text-text-secondary">내 근처에서 거래하는 중고마켓</p>
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <Input label="이메일" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="email@example.com" />
+              <Input label="비밀번호" type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="비밀번호 입력" />
+              <Button type="submit" variant="primary" size="lg" fullWidth disabled={loading} className="mt-2">
+                {loading ? <Spinner size="sm" className="mx-auto border-white border-t-transparent" style={{borderTopColor:'transparent'}} /> : '로그인'}
+              </Button>
+            </form>
+            <p className="text-center text-sm text-text-secondary mt-6">
+              계정이 없으신가요?{' '}
+              <Link to="/signup" className="text-carrot font-semibold hover:underline">회원가입</Link>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page: Signup
+    // ========================================
+    function SignupPage() {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [nickname, setNickname] = useState('');
+      const [loading, setLoading] = useState(false);
+      const { navigate } = useRouter();
+      const showToast = useToast();
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!email || !password || !nickname) { showToast('모든 항목을 입력해주세요'); return; }
+        if (password.length < 6) { showToast('비밀번호는 6자 이상이어야 합니다'); return; }
+        setLoading(true);
+        try {
+          // Supabase Auth 회원가입
+          const { data, error } = await db.auth.signUp({ email, password });
+          if (error) throw error;
+
+          const userId = data.user?.id;
+          if (!userId) throw new Error('회원가입 처리 중 오류가 발생했습니다');
+
+          // gamja_02_profiles 생성
+          const { error: profileError } = await db.from(PROFILES).insert({
+            id: userId,
+            nickname: nickname.trim(),
+            manner_temp: 36.5,
+          });
+          if (profileError) throw profileError;
+
+          showToast('회원가입 성공! 이메일 인증을 확인해주세요.', 'success');
+          navigate('/login');
+        } catch (err) {
+          showToast(err.message || '회원가입에 실패했습니다');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-white fade-in">
+          <div className="w-full max-w-[320px]">
+            <div className="text-center mb-10">
+              <h1 className="text-3xl font-extrabold text-carrot mb-1">회원가입</h1>
+              <p className="text-sm text-text-secondary">당근마켓에 오신 것을 환영합니다</p>
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <Input label="이메일" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="email@example.com" />
+              <Input label="비밀번호" type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="6자 이상 입력" />
+              <Input label="닉네임" value={nickname} onChange={e => setNickname(e.target.value)}
+                placeholder="당근마켓에서 사용할 이름" />
+              <Button type="submit" variant="primary" size="lg" fullWidth disabled={loading} className="mt-2">
+                {loading ? <Spinner size="sm" className="mx-auto" /> : '가입하기'}
+              </Button>
+            </form>
+            <p className="text-center text-sm text-text-secondary mt-6">
+              이미 계정이 있으신가요?{' '}
+              <Link to="/login" className="text-carrot font-semibold hover:underline">로그인</Link>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page: Home (Product List)
+    // ========================================
+    function HomePage() {
+      const [products, setProducts] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [search, setSearch] = useState('');
+      const [activeCategory, setActiveCategory] = useState('');
+      const [refreshing, setRefreshing] = useState(false);
+      const { user, isLoggedIn } = useAuth();
+      const { navigate } = useRouter();
+      const showToast = useToast();
+      const searchTimeoutRef = useRef(null);
+
+      const locationName = user?.location_name || '당근마켓';
+
+      const fetchProducts = useCallback(async (searchVal, categoryVal) => {
+        try {
+          let query = db.from(PRODUCTS)
+            .select(`
+              *,
+              gamja_02_profiles!gamja_02_products_user_id_fkey (
+                nickname, manner_temp, location_name
+              )
+            `)
+            .order('created_at', { ascending: false });
+
+          if (searchVal) {
+            query = query.or(`title.ilike.%${searchVal}%,description.ilike.%${searchVal}%`);
+          }
+          if (categoryVal) {
+            query = query.eq('category', categoryVal);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+          setProducts(data || []);
+        } catch (err) {
+          showToast('상품을 불러오지 못했습니다');
+        } finally {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        setLoading(true);
+        fetchProducts(search, activeCategory);
+      }, [activeCategory]);
+
+      // Debounced search
+      useEffect(() => {
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = setTimeout(() => {
+          setLoading(true);
+          fetchProducts(search, activeCategory);
+        }, 400);
+        return () => clearTimeout(searchTimeoutRef.current);
+      }, [search]);
+
+      const handleRefresh = () => {
+        setRefreshing(true);
+        fetchProducts(search, activeCategory);
+      };
+
+      return (
+        <div className="fade-in pb-[72px]">
+          {/* Header */}
+          <div className="sticky top-0 bg-white z-30 border-b border-border-color">
+            <div className="flex items-center justify-between px-4 h-[52px]">
+              <div className="flex items-center gap-1">
+                <h1 className="text-lg font-bold text-text-primary">{locationName}</h1>
+              </div>
+              <button onClick={handleRefresh} className="p-2 hover:bg-gray-100 rounded-full transition-colors" title="새로고침">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#212121" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search bar */}
+            <div className="px-4 pb-2">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
+                </svg>
+                <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="검색어를 입력해주세요"
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-100 rounded-xl text-sm text-text-primary placeholder-text-tertiary outline-none focus:bg-gray-200 transition-colors" />
+                {search && (
+                  <button onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 bg-gray-300 rounded-full">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category chips */}
+            <div className="px-4 pb-2 overflow-x-auto hide-scrollbar">
+              <div className="flex gap-2 w-max">
+                <button onClick={() => setActiveCategory('')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
+                    activeCategory === '' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border-color hover:bg-gray-50'
+                  }`}>
+                  전체
+                </button>
+                {CATEGORIES.map(cat => (
+                  <button key={cat} onClick={() => setActiveCategory(activeCategory === cat ? '' : cat)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${
+                      activeCategory === cat ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border-color hover:bg-gray-50'
+                    }`}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {refreshing && (
+            <div className="flex justify-center py-3">
+              <Spinner size="sm" />
+            </div>
+          )}
+
+          {loading && !refreshing ? (
+            <LoadingScreen />
+          ) : products.length === 0 ? (
+            <EmptyState icon="🥕" title="등록된 상품이 없어요"
+              description={search ? `"${search}" 검색 결과가 없습니다` : '첫 번째 상품을 등록해보세요!'} />
+          ) : (
+            <div className="bg-white">
+              {products.map(p => (
+                <ProductCard key={p.id} product={p} onClick={(id) => navigate(`/product/${id}`)} />
+              ))}
+            </div>
+          )}
+
+          {/* FAB */}
+          {isLoggedIn && (
+            <button onClick={() => navigate('/product/new')}
+              className="fixed bottom-[76px] bg-carrot text-white rounded-full shadow-lg flex items-center justify-center hover:bg-carrot-dark active:scale-95 transition-all z-30"
+              style={{ right: 'max(16px, calc((100vw - 480px) / 2 + 16px))', width: '56px', height: '56px' }}>
+              <IconPlus color="white" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page: Product Detail
+    // ========================================
+    function ProductDetailPage({ params }) {
+      const [product, setProduct] = useState(null);
+      const [seller, setSeller] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [statusModalOpen, setStatusModalOpen] = useState(false);
+      const [deleting, setDeleting] = useState(false);
+      const { user, isLoggedIn } = useAuth();
+      const { navigate } = useRouter();
+      const showToast = useToast();
+      const productId = params?.id;
+
+      const isOwner = user && product && user.id === product.user_id;
+
+      useEffect(() => {
+        if (!productId) return;
+        setLoading(true);
+
+        db.from(PRODUCTS)
+          .select(`
+            *,
+            gamja_02_profiles!gamja_02_products_user_id_fkey (
+              id, nickname, manner_temp, location_name, profile_image
+            )
+          `)
+          .eq('id', productId)
+          .single()
+          .then(({ data, error }) => {
+            if (error) {
+              showToast('상품을 찾을 수 없습니다');
+              navigate('/');
+              return;
+            }
+            setProduct(data);
+            setSeller(data.gamja_02_profiles);
+            // 조회수 증가 (비동기, 에러 무시)
+            db.from(PRODUCTS).update({ view_count: (data.view_count || 0) + 1 }).eq('id', productId).then(() => {});
+          })
+          .finally(() => setLoading(false));
+      }, [productId]);
+
+      const handleStatusChange = async (newStatus) => {
+        const { error } = await db.from(PRODUCTS).update({ status: newStatus }).eq('id', productId);
+        if (error) { showToast('상태 변경에 실패했습니다'); return; }
+        setProduct(prev => ({ ...prev, status: newStatus }));
+        setStatusModalOpen(false);
+        showToast('상태가 변경되었습니다', 'success');
+      };
+
+      const handleDelete = async () => {
+        if (!confirm('정말 삭제하시겠습니까?')) return;
+        setDeleting(true);
+        const { error } = await db.from(PRODUCTS).delete().eq('id', productId);
+        if (error) {
+          showToast('삭제에 실패했습니다');
+          setDeleting(false);
+          return;
+        }
+        showToast('상품이 삭제되었습니다', 'success');
+        navigate('/');
+      };
+
+      if (loading) return <LoadingScreen />;
+      if (!product) return <EmptyState title="상품을 찾을 수 없습니다" />;
+
+      const sellerNickname = seller?.nickname || '판매자';
+      const mannerTemp = seller?.manner_temp || 36.5;
+      const sellerLocation = seller?.location_name || product.location_name || '';
+      const images = product.images || [];
+      const statusInfo = STATUS_LABELS[product.status];
+
+      return (
+        <div className="fade-in pb-[150px]">
+          {/* Top bar */}
+          <div className="sticky top-0 z-30 flex items-center justify-between px-2 h-[48px] bg-white/80 backdrop-blur-md border-b border-border-color">
+            <button onClick={() => window.history.back()} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <IconBack />
+            </button>
+            {isOwner && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => navigate(`/product/${productId}/edit`)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors text-text-secondary">
+                  <IconEdit />
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors text-red-500">
+                  <IconTrash />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Image carousel */}
+          <ImageCarousel images={images} />
+
+          {/* Seller info */}
+          <div className="px-4 py-3 bg-white border-b border-border-color">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-carrot-light rounded-full flex items-center justify-center text-carrot font-bold text-sm flex-shrink-0">
+                {seller?.profile_image
+                  ? <img src={seller.profile_image} alt="" className="w-full h-full object-cover rounded-full" />
+                  : sellerNickname.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-text-primary">{sellerNickname}</p>
+                {sellerLocation && (
+                  <p className="text-xs text-text-secondary flex items-center gap-0.5">
+                    <IconLocation /> {sellerLocation}
+                  </p>
+                )}
+              </div>
+              <div className="w-24">
+                <MannerTemp temp={mannerTemp} size="sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Product info */}
+          <div className="px-4 py-4 bg-white">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              {product.status && product.status !== '판매중' && statusInfo && (
+                <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+              )}
+              {product.price_suggestion && (
+                <Badge variant="orange">가격 제안 받기</Badge>
+              )}
+              {product.is_free && (
+                <Badge variant="orange">나눔🧡</Badge>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-text-primary mb-1">{product.title}</h2>
+            <p className="text-xs text-text-secondary mb-4">
+              {product.category && <span className="underline">{product.category}</span>}
+              {product.category && ' · '}{timeAgo(product.created_at)}
+            </p>
+            <div className="text-[15px] text-text-primary leading-relaxed whitespace-pre-wrap">
+              {product.description || '상세 설명이 없습니다.'}
+            </div>
+            <div className="flex items-center gap-3 mt-5 pt-3 border-t border-border-color text-text-tertiary text-xs">
+              <span className="flex items-center gap-1">
+                <IconEye />
+                조회 {product.view_count || 0}
+              </span>
+              {product.location_name && (
+                <span className="flex items-center gap-1">
+                  <IconLocation />
+                  {product.location_name}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom price bar */}
+          <div className="fixed left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-border-color z-50 px-4 py-3" style={{bottom: '0px'}}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <button className="flex-shrink-0">
+                  <IconHeart />
+                </button>
+                <div className="h-8 w-px bg-border-color" />
+                <span className="text-lg font-bold text-text-primary">
+                  {formatPrice(product.price, product.is_free)}
+                </span>
+              </div>
+              {isOwner ? (
+                <Button variant="primary" size="md" onClick={() => setStatusModalOpen(true)}>
+                  상태 변경
+                </Button>
+              ) : (
+                <Button variant="primary" size="md" onClick={() => showToast('채팅 기능 준비 중입니다', 'info')}>
+                  채팅하기
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Status change modal */}
+          <Modal isOpen={statusModalOpen} onClose={() => setStatusModalOpen(false)} title="거래 상태 변경">
+            <div className="flex flex-col gap-2">
+              {['판매중', '예약중', '거래완료'].map(status => (
+                <button key={status} onClick={() => handleStatusChange(status)}
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${
+                    product.status === status ? 'bg-carrot-light text-carrot font-semibold' : 'bg-gray-50 text-text-primary hover:bg-gray-100'
+                  }`}>
+                  {STATUS_LABELS[status]?.label || status}
+                  {product.status === status && ' (현재)'}
+                </button>
+              ))}
+            </div>
+          </Modal>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Image Upload Area Component
+    // ========================================
+    function ImageUploadArea({ images, onAdd, onRemove, userId }) {
+      const fileInputRef = useRef(null);
+      const [uploading, setUploading] = useState(false);
+      const showToast = useToast();
+
+      const handleFileChange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        const remaining = 10 - images.length;
+        if (remaining <= 0) {
+          showToast('이미지는 최대 10개까지 등록 가능합니다', 'info');
+          return;
+        }
+
+        const toUpload = files.slice(0, remaining);
+        setUploading(true);
+        try {
+          for (const file of toUpload) {
+            const url = await uploadImage(file, userId);
+            onAdd(url);
+          }
+          showToast(`${toUpload.length}개 이미지 업로드 완료`, 'success');
+        } catch (err) {
+          showToast('이미지 업로드에 실패했습니다: ' + err.message);
+        } finally {
+          setUploading(false);
+          e.target.value = '';
+        }
+      };
+
+      return (
+        <div>
+          <label className="text-sm font-medium text-text-primary mb-2 block">
+            상품 이미지 ({images.length}/10)
+          </label>
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
+            {/* Upload button */}
+            <button type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || images.length >= 10}
+              className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 flex-shrink-0 hover:border-carrot transition-colors disabled:opacity-50">
+              {uploading ? (
+                <Spinner size="sm" />
+              ) : (
+                <>
+                  <IconCamera />
+                  <span className="text-[10px] text-text-tertiary">사진 추가</span>
+                </>
+              )}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
+              onChange={handleFileChange} />
+
+            {/* Image previews */}
+            {images.map((img, idx) => (
+              <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+                <img src={img} alt="" className="w-full h-full object-cover"
+                  onError={e => { e.target.style.display = 'none'; }} />
+                <button type="button" onClick={() => onRemove(idx)}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+                {idx === 0 && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/40 text-white text-[9px] text-center py-0.5">대표사진</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page: Product Form (Create / Edit)
+    // ========================================
+    function ProductFormPage({ params }) {
+      const isEdit = params?.id != null && params?.id !== 'new';
+      const productId = isEdit ? params?.id : null;
+
+      const [images, setImages] = useState([]);
+      const [title, setTitle] = useState('');
+      const [category, setCategory] = useState('');
+      const [price, setPrice] = useState('');
+      const [isPriceNegotiable, setIsPriceNegotiable] = useState(false);
+      const [isFree, setIsFree] = useState(false);
+      const [description, setDescription] = useState('');
+      const [locationName, setLocationName] = useState('');
+      const [latitude, setLatitude] = useState(null);
+      const [longitude, setLongitude] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [fetching, setFetching] = useState(isEdit);
+      const [categoryOpen, setCategoryOpen] = useState(false);
+
+      const { user, isLoggedIn } = useAuth();
+      const { navigate } = useRouter();
+      const showToast = useToast();
+
+      useEffect(() => {
+        if (!isLoggedIn) {
+          showToast('로그인이 필요합니다');
+          navigate('/login');
+        }
+      }, [isLoggedIn]);
+
+      // 기존 상품 데이터 로드 (수정 시)
+      useEffect(() => {
+        if (isEdit && productId) {
+          db.from(PRODUCTS).select('*').eq('id', productId).single()
+            .then(({ data, error }) => {
+              if (error || !data) {
+                showToast('상품 정보를 불러올 수 없습니다');
+                navigate('/');
+                return;
+              }
+              setTitle(data.title || '');
+              setCategory(data.category || '');
+              setPrice(data.price === 0 ? '' : String(data.price || ''));
+              setIsFree(data.is_free || false);
+              setIsPriceNegotiable(data.price_suggestion || false);
+              setDescription(data.description || '');
+              setLocationName(data.location_name || '');
+              setLatitude(data.latitude || null);
+              setLongitude(data.longitude || null);
+              setImages(data.images || []);
+            })
+            .finally(() => setFetching(false));
+        }
+      }, [isEdit, productId]);
+
+      // 위치 자동 감지
+      useEffect(() => {
+        if (user?.location_name) {
+          setLocationName(user.location_name);
+          setLatitude(user.latitude || null);
+          setLongitude(user.longitude || null);
+        } else if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(async (pos) => {
+            try {
+              const { latitude: lat, longitude: lng } = pos.coords;
+              setLatitude(lat);
+              setLongitude(lng);
+              const geoRes = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`
+              );
+              const geoData = await geoRes.json();
+              const locName = geoData.address?.borough || geoData.address?.suburb ||
+                geoData.address?.town || geoData.address?.city_district ||
+                geoData.address?.city || '내 동네';
+              setLocationName(locName);
+            } catch {}
+          });
+        }
+      }, [user]);
+
+      const handleFreeToggle = (checked) => {
+        setIsFree(checked);
+        if (checked) { setPrice(''); }
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!title.trim()) { showToast('제목을 입력해주세요'); return; }
+        if (!category) { showToast('카테고리를 선택해주세요'); return; }
+        if (!isFree && !price) { showToast('가격을 입력하거나 나눔을 선택해주세요'); return; }
+
+        const body = {
+          title: title.trim(),
+          category,
+          price: isFree ? 0 : Number(price),
+          price_suggestion: isPriceNegotiable,
+          is_free: isFree,
+          description: description.trim(),
+          images: images,
+          location_name: locationName || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        setLoading(true);
+        try {
+          if (isEdit) {
+            const { error } = await db.from(PRODUCTS).update(body).eq('id', productId).eq('user_id', user.id);
+            if (error) throw error;
+            showToast('상품이 수정되었습니다', 'success');
+            navigate(`/product/${productId}`);
+          } else {
+            const { data, error } = await db.from(PRODUCTS)
+              .insert({ ...body, user_id: user.id })
+              .select()
+              .single();
+            if (error) throw error;
+            showToast('상품이 등록되었습니다', 'success');
+            navigate(data?.id ? `/product/${data.id}` : '/');
+          }
+        } catch (err) {
+          showToast(err.message || '저장에 실패했습니다');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      if (fetching) return <LoadingScreen />;
+
+      return (
+        <div className="fade-in pb-6">
+          {/* Header */}
+          <div className="sticky top-0 z-30 flex items-center justify-between px-2 h-[48px] bg-white border-b border-border-color">
+            <button onClick={() => window.history.back()} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <IconBack />
+            </button>
+            <h2 className="text-base font-bold text-text-primary">
+              {isEdit ? '상품 수정' : '상품 등록'}
+            </h2>
+            <div className="w-10" />
+          </div>
+
+          <form onSubmit={handleSubmit} className="px-4 py-4 flex flex-col gap-4">
+            {/* Image upload */}
+            {user?.id && (
+              <ImageUploadArea
+                images={images}
+                onAdd={(url) => setImages(prev => [...prev, url])}
+                onRemove={(idx) => setImages(prev => prev.filter((_, i) => i !== idx))}
+                userId={user.id}
+              />
+            )}
+
+            {/* Title */}
+            <Input label="제목" value={title} onChange={e => setTitle(e.target.value)}
+              placeholder="상품 제목을 입력하세요" />
+
+            {/* Category */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-text-primary">카테고리</label>
+              <div className="relative">
+                <button type="button" onClick={() => setCategoryOpen(!categoryOpen)}
+                  className="w-full px-4 py-3 rounded-xl border border-border-color bg-white text-sm text-left flex items-center justify-between">
+                  <span className={category ? 'text-text-primary' : 'text-text-tertiary'}>
+                    {category || '카테고리를 선택하세요'}
+                  </span>
+                  <IconChevronDown />
+                </button>
+                {categoryOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border-color rounded-xl shadow-lg z-10 max-h-60 overflow-y-auto">
+                    {CATEGORIES.map(cat => (
+                      <button key={cat} type="button"
+                        onClick={() => { setCategory(cat); setCategoryOpen(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
+                          category === cat ? 'text-carrot font-semibold bg-carrot-light' : 'text-text-primary'
+                        }`}>
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Price */}
+            <div>
+              <Input label="가격" type="number" value={price}
+                onChange={e => setPrice(e.target.value)}
+                placeholder="가격을 입력하세요"
+                disabled={isFree} />
+              {price && !isFree && (
+                <p className="text-xs text-text-secondary mt-1">{Number(price).toLocaleString('ko-KR')}원</p>
+              )}
+              <div className="flex flex-col gap-2 mt-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isPriceNegotiable}
+                    onChange={e => setIsPriceNegotiable(e.target.checked)}
+                    className="w-4 h-4 rounded" style={{ accentColor: '#FF6F0F' }} />
+                  <span className="text-sm text-text-primary">가격 제안 받기</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isFree}
+                    onChange={e => handleFreeToggle(e.target.checked)}
+                    className="w-4 h-4 rounded" style={{ accentColor: '#FF6F0F' }} />
+                  <span className="text-sm text-text-primary">나눔 (무료 나눔) 🧡</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Description */}
+            <Textarea label="자세한 설명" value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="상품의 상태, 구매 시기, 사용 기간 등을 적어주세요." rows={6} />
+
+            {/* Location */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-text-primary">거래 장소</label>
+              <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-xl">
+                <IconLocation />
+                <span className="text-sm text-text-primary">
+                  {locationName || '위치를 가져오는 중...'}
+                </span>
+              </div>
+            </div>
+
+            <Button type="submit" variant="primary" size="lg" fullWidth disabled={loading} className="mt-2">
+              {loading ? (
+                <Spinner size="sm" className="mx-auto" />
+              ) : (
+                isEdit ? '수정 완료' : '등록하기'
+              )}
+            </Button>
+          </form>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page: My Page
+    // ========================================
+    function MyPage() {
+      const { user, isLoggedIn, logout, refreshProfile } = useAuth();
+      const { navigate } = useRouter();
+      const showToast = useToast();
+      const [products, setProducts] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        if (!isLoggedIn) {
+          navigate('/login');
+          return;
+        }
+        if (user?.id) {
+          db.from(PRODUCTS)
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .then(({ data, error }) => {
+              if (!error) setProducts(data || []);
+            })
+            .finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      }, [isLoggedIn, user?.id]);
+
+      if (!user) return <LoadingScreen />;
+
+      const handleLogout = async () => {
+        await logout();
+        showToast('로그아웃 되었습니다', 'info');
+      };
+
+      return (
+        <div className="fade-in pb-[72px]">
+          {/* Header */}
+          <div className="sticky top-0 z-30 flex items-center justify-between px-4 h-[52px] bg-white border-b border-border-color">
+            <h2 className="text-lg font-bold text-text-primary">나의 당근</h2>
+            <button onClick={handleLogout}
+              className="text-sm text-text-secondary hover:text-red-500 transition-colors font-medium">
+              로그아웃
+            </button>
+          </div>
+
+          {/* Profile section */}
+          <div className="px-4 py-5 bg-white border-b border-border-color">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-carrot-light rounded-full flex items-center justify-center text-carrot font-bold text-2xl overflow-hidden">
+                {user.profile_image
+                  ? <img src={user.profile_image} alt="" className="w-full h-full object-cover" />
+                  : (user.nickname?.charAt(0) || 'U')}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-text-primary">{user.nickname || '사용자'}</h3>
+                <p className="text-sm text-text-secondary">{user.email}</p>
+                {user.location_name && (
+                  <p className="text-xs text-text-secondary flex items-center gap-0.5 mt-0.5">
+                    <IconLocation /> {user.location_name}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4">
+              <MannerTemp temp={user.manner_temp || 36.5} />
+            </div>
+          </div>
+
+          {/* My products */}
+          <div className="mt-2">
+            <div className="px-4 py-3 bg-white border-b border-border-color">
+              <h3 className="text-base font-bold text-text-primary">
+                내 판매 상품{' '}
+                {products.length > 0 && <span className="text-carrot">{products.length}</span>}
+              </h3>
+            </div>
+            {loading ? (
+              <div className="flex justify-center py-8"><Spinner /></div>
+            ) : products.length === 0 ? (
+              <EmptyState icon="🛒" title="등록한 상품이 없어요"
+                description="중고 물건을 판매해보세요!" />
+            ) : (
+              <div className="bg-white">
+                {products.map(p => (
+                  <ProductCard key={p.id} product={p} onClick={(id) => navigate(`/product/${id}`)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const { authLoading } = useAuth();
+
+      if (authLoading) {
+        return (
+          <div className="max-w-[480px] mx-auto min-h-screen bg-white relative shadow-lg flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Spinner size="lg" />
+              <span className="text-text-secondary text-sm">로딩 중...</span>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-[480px] mx-auto min-h-screen bg-white relative shadow-lg">
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/product/new" element={<ProductFormPage />} />
+            <Route path="/product/:id/edit" element={<ProductFormPage />} />
+            <Route path="/product/:id" element={<ProductDetailPage />} />
+            <Route path="/my" element={<MyPage />} />
+            <Route path="*" element={<HomePage />} />
+          </Routes>
+          <BottomNav />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <Router>
+        <AuthProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </AuthProvider>
+      </Router>
+    );
+  </script>
+</body>
+</html>

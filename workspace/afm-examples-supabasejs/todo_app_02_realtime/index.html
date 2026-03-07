@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App - Realtime</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .todo-enter { animation: slideIn 0.2s ease-out; }
+    .todo-flash { animation: flash 0.6s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes flash { 0% { background-color: #dbeafe; } 100% { background-color: transparent; } }
+    .pulse-dot { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // Supabase Client
+    // ========================================
+    // TODO: 아래 값을 본인의 Supabase 프로젝트 정보로 교체하세요
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_KEY = 'YOUR_SUPABASE_PUBLISHABLE_KEY';
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const TABLE = 'todo_app_02_todos';
+
+    // ========================================
+    // Auth Component
+    // ========================================
+    function AuthView() {
+      const [isLogin, setIsLogin] = useState(true);
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+          const { error } = isLogin
+            ? await db.auth.signInWithPassword({ email, password })
+            : await db.auth.signUp({ email, password });
+          if (error) throw error;
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="w-full max-w-sm">
+            <h1 className="text-2xl font-bold text-center text-gray-800 mb-1">Todo App</h1>
+            <p className="text-center text-xs text-green-600 font-medium mb-8 flex items-center justify-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-green-500 inline-block pulse-dot"></span> Realtime
+            </p>
+            <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+              <h2 className="text-lg font-semibold text-gray-700">{isLogin ? '로그인' : '회원가입'}</h2>
+              {error && <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>}
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일" required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호 (6자 이상)" required minLength={6}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <button type="submit" disabled={loading}
+                className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">
+                {loading ? '처리 중...' : isLogin ? '로그인' : '회원가입'}
+              </button>
+              <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); }}
+                className="w-full text-sm text-gray-500 hover:text-gray-700">
+                {isLogin ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Realtime Status Indicator
+    // ========================================
+    function RealtimeStatus({ status }) {
+      const config = {
+        SUBSCRIBED: { color: 'bg-green-500', label: 'Live', pulse: true },
+        SUBSCRIBING: { color: 'bg-yellow-500', label: '연결 중...', pulse: false },
+        CLOSED: { color: 'bg-red-500', label: '연결 끊김', pulse: false },
+        CHANNEL_ERROR: { color: 'bg-red-500', label: '오류', pulse: false },
+      };
+      const c = config[status] || { color: 'bg-gray-400', label: status, pulse: false };
+      return (
+        <div className="flex items-center gap-1.5">
+          <div className={`w-2 h-2 rounded-full ${c.color} ${c.pulse ? 'pulse-dot' : ''}`} />
+          <span className="text-xs text-gray-500">{c.label}</span>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Todo Item Component
+    // ========================================
+    function TodoItem({ todo, onToggle, onDelete, flash }) {
+      return (
+        <div className={`${flash ? 'todo-flash' : 'todo-enter'} flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-gray-200 group`}>
+          <button onClick={() => onToggle(todo.id, !todo.done)} className="flex-shrink-0">
+            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+              todo.done ? 'bg-blue-600 border-blue-600' : 'border-gray-300 hover:border-blue-400'
+            }`}>
+              {todo.done && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>}
+            </div>
+          </button>
+          <span className={`flex-1 text-sm ${todo.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>{todo.text}</span>
+          <button onClick={() => onDelete(todo.id)}
+            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all text-sm">삭제</button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App View (Todo List with Realtime)
+    // ========================================
+    function AppView({ user }) {
+      const [todos, setTodos] = useState([]);
+      const [newText, setNewText] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [rtStatus, setRtStatus] = useState('SUBSCRIBING');
+      const [flashIds, setFlashIds] = useState(new Set());
+      const inputRef = useRef(null);
+      const localActionIds = useRef(new Set());
+
+      const fetchTodos = useCallback(async () => {
+        const { data } = await db.from(TABLE).select('*').order('created_at', { ascending: true });
+        if (data) setTodos(data);
+        setLoading(false);
+      }, []);
+
+      // Subscribe to Realtime changes
+      useEffect(() => {
+        const channel = db.channel('todos-realtime')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: TABLE }, (payload) => {
+            const isLocal = localActionIds.current.delete(payload.new.id);
+            setTodos(prev => {
+              if (prev.some(t => t.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+            if (!isLocal) {
+              setFlashIds(prev => new Set(prev).add(payload.new.id));
+              setTimeout(() => setFlashIds(prev => { const n = new Set(prev); n.delete(payload.new.id); return n; }), 700);
+            }
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: TABLE }, (payload) => {
+            const isLocal = localActionIds.current.delete(payload.new.id);
+            setTodos(prev => prev.map(t => t.id === payload.new.id ? payload.new : t));
+            if (!isLocal) {
+              setFlashIds(prev => new Set(prev).add(payload.new.id));
+              setTimeout(() => setFlashIds(prev => { const n = new Set(prev); n.delete(payload.new.id); return n; }), 700);
+            }
+          })
+          .on('postgres_changes', { event: 'DELETE', schema: 'public', table: TABLE }, (payload) => {
+            localActionIds.current.delete(payload.old.id);
+            setTodos(prev => prev.filter(t => t.id !== payload.old.id));
+          })
+          .subscribe((status) => setRtStatus(status));
+
+        fetchTodos();
+
+        return () => { db.removeChannel(channel); };
+      }, [fetchTodos]);
+
+      const addTodo = async (e) => {
+        e.preventDefault();
+        const text = newText.trim();
+        if (!text) return;
+        setNewText('');
+        const { data, error } = await db.from(TABLE).insert({ text, user_id: user.id }).select().single();
+        if (!error && data) {
+          localActionIds.current.add(data.id);
+          setTodos(prev => prev.some(t => t.id === data.id) ? prev : [...prev, data]);
+        }
+        inputRef.current?.focus();
+      };
+
+      const toggleTodo = async (id, done) => {
+        localActionIds.current.add(id);
+        setTodos(prev => prev.map(t => t.id === id ? { ...t, done } : t));
+        await db.from(TABLE).update({ done }).eq('id', id);
+      };
+
+      const deleteTodo = async (id) => {
+        localActionIds.current.add(id);
+        setTodos(prev => prev.filter(t => t.id !== id));
+        await db.from(TABLE).delete().eq('id', id);
+      };
+
+      const doneCount = todos.filter(t => t.done).length;
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-bold text-gray-800">Todo App</h1>
+              <RealtimeStatus status={rtStatus} />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">{user.email}</span>
+              <button onClick={() => db.auth.signOut()} className="text-xs text-gray-400 hover:text-gray-600">로그아웃</button>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-lg mx-auto w-full px-4 py-6">
+            <form onSubmit={addTodo} className="flex gap-2 mb-6">
+              <input ref={inputRef} value={newText} onChange={e => setNewText(e.target.value)}
+                placeholder="할 일을 입력하세요" autoFocus
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+              <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex-shrink-0">추가</button>
+            </form>
+
+            {loading ? (
+              <p className="text-center text-gray-400 text-sm py-8">불러오는 중...</p>
+            ) : todos.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-8">할 일이 없습니다</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {todos.map(todo => (
+                    <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} flash={flashIds.has(todo.id)} />
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 text-center mt-4">{doneCount}/{todos.length} 완료</p>
+              </>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Root
+    // ========================================
+    function App() {
+      const [user, setUser] = useState(null);
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        db.auth.getSession().then(({ data: { session } }) => {
+          setUser(session?.user || null);
+          setReady(true);
+        });
+        const { data: { subscription } } = db.auth.onAuthStateChange((_event, session) => {
+          setUser(session?.user || null);
+        });
+        return () => subscription.unsubscribe();
+      }, []);
+
+      if (!ready) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400 text-sm">로딩 중...</p></div>;
+      return user ? <AppView user={user} /> : <AuthView />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

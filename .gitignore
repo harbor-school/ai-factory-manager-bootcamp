@@ -1,0 +1,24 @@
+# === 공통 ===
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*.swo
+*~
+.env
+.env.*
+!.env.example
+node_modules
+
+
+# === IDE ===
+.idea/
+.vscode/
+*.sublime-*
+
+# === Python cache ===
+__pycache__/
+*.pyc
+
+# === Claude Code memory ===
+.claude/projects/

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { background-color: #f8fafc; }
+    .fade-in { animation: fadeIn 0.2s ease-in-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // API Configuration
+    // ========================================
+    const API_BASE = window.location.origin;
+
+    async function apiFetch(endpoint, options = {}) {
+      const token = localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json', ...options.headers };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('email');
+        throw new Error('UNAUTHORIZED');
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || body.error || `Request failed (${res.status})`);
+      }
+      if (res.status === 204) return null;
+      const json = await res.json();
+      return json.data !== undefined ? json.data : json;
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, onClick, variant = 'primary', size = 'md', disabled = false, loading = false, className = '', type = 'button' }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-slate-800 text-white hover:bg-slate-700 focus:ring-slate-500',
+        secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-slate-400',
+        danger: 'bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 focus:ring-red-400',
+        ghost: 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 focus:ring-slate-400',
+      };
+      const sizes = {
+        sm: 'px-2.5 py-1.5 text-xs',
+        md: 'px-4 py-2 text-sm',
+        lg: 'px-5 py-2.5 text-base',
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled || loading}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {loading && (
+            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, type = 'text', value, onChange, placeholder, error, disabled = false, className = '', onKeyDown, inputRef }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+          <input
+            ref={inputRef}
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            disabled={disabled}
+            onKeyDown={onKeyDown}
+            className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 ${
+              error
+                ? 'border-red-300 focus:ring-red-400 focus:border-red-400'
+                : 'border-slate-300 focus:ring-slate-400 focus:border-slate-400'
+            } disabled:bg-slate-50 disabled:text-slate-400`}
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Auth Screen
+    // ========================================
+    function AuthScreen({ onAuthSuccess }) {
+      const [mode, setMode] = useState('login');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      const handleSubmit = useCallback(async () => {
+        if (!email.trim() || !password.trim()) {
+          setError('Email and password are required.');
+          return;
+        }
+        setError('');
+        setLoading(true);
+        try {
+          const endpoint = mode === 'login' ? '/api/login' : '/api/register';
+          const data = await apiFetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify({ email: email.trim(), password }),
+          });
+          const token = data.token;
+          const userEmail = (data.user && data.user.email) || data.email || email.trim();
+          localStorage.setItem('token', token);
+          localStorage.setItem('email', userEmail);
+          onAuthSuccess(userEmail);
+        } catch (err) {
+          setError(err.message === 'UNAUTHORIZED' ? 'Invalid credentials.' : err.message);
+        } finally {
+          setLoading(false);
+        }
+      }, [email, password, mode, onAuthSuccess]);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') handleSubmit();
+      }, [handleSubmit]);
+
+      const toggleMode = () => {
+        setMode(m => m === 'login' ? 'register' : 'login');
+        setError('');
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="w-full max-w-sm fade-in">
+            <div className="text-center mb-8">
+              <h1 className="text-2xl font-bold text-slate-800">Todo App</h1>
+              <p className="text-sm text-slate-500 mt-1">
+                {mode === 'login' ? 'Sign in to your account' : 'Create a new account'}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <Input
+                label="Email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                className="mb-4"
+              />
+              <Input
+                label="Password"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter password"
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                className="mb-5"
+              />
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                onClick={handleSubmit}
+                loading={loading}
+                className="w-full"
+                size="md"
+              >
+                {mode === 'login' ? 'Sign In' : 'Create Account'}
+              </Button>
+            </div>
+
+            <p className="text-center text-sm text-slate-500 mt-4">
+              {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              <button
+                onClick={toggleMode}
+                className="text-slate-800 font-medium hover:underline focus:outline-none"
+              >
+                {mode === 'login' ? 'Register' : 'Sign In'}
+              </button>
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Todo Screen
+    // ========================================
+    function TodoScreen({ userEmail, onLogout }) {
+      const [todos, setTodos] = useState([]);
+      const [newTitle, setNewTitle] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [adding, setAdding] = useState(false);
+      const [error, setError] = useState('');
+      const inputRef = useRef(null);
+
+      const fetchTodos = useCallback(async () => {
+        try {
+          const data = await apiFetch('/api/todos');
+          setTodos(Array.isArray(data) ? data : (data.todos || []));
+          setError('');
+        } catch (err) {
+          if (err.message === 'UNAUTHORIZED') {
+            onLogout();
+            return;
+          }
+          setError('Failed to load todos.');
+        } finally {
+          setLoading(false);
+        }
+      }, [onLogout]);
+
+      useEffect(() => {
+        fetchTodos();
+      }, [fetchTodos]);
+
+      useEffect(() => {
+        if (!loading && inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, [loading]);
+
+      const addTodo = useCallback(async () => {
+        const title = newTitle.trim();
+        if (!title) return;
+        setAdding(true);
+        try {
+          const created = await apiFetch('/api/todos', {
+            method: 'POST',
+            body: JSON.stringify({ title }),
+          });
+          setTodos(prev => [...prev, created]);
+          setNewTitle('');
+          setError('');
+          if (inputRef.current) inputRef.current.focus();
+        } catch (err) {
+          if (err.message === 'UNAUTHORIZED') { onLogout(); return; }
+          setError('Failed to add todo.');
+        } finally {
+          setAdding(false);
+        }
+      }, [newTitle, onLogout]);
+
+      const toggleTodo = useCallback(async (todo) => {
+        const updated = { ...todo, completed: !todo.completed };
+        setTodos(prev => prev.map(t => t.id === todo.id ? updated : t));
+        try {
+          await apiFetch(`/api/todos/${todo.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ completed: !todo.completed }),
+          });
+        } catch (err) {
+          if (err.message === 'UNAUTHORIZED') { onLogout(); return; }
+          setTodos(prev => prev.map(t => t.id === todo.id ? todo : t));
+          setError('Failed to update todo.');
+        }
+      }, [onLogout]);
+
+      const deleteTodo = useCallback(async (id) => {
+        const prev = todos;
+        setTodos(t => t.filter(item => item.id !== id));
+        try {
+          await apiFetch(`/api/todos/${id}`, { method: 'DELETE' });
+        } catch (err) {
+          if (err.message === 'UNAUTHORIZED') { onLogout(); return; }
+          setTodos(prev);
+          setError('Failed to delete todo.');
+        }
+      }, [todos, onLogout]);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') addTodo();
+      }, [addTodo]);
+
+      if (loading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <svg className="animate-spin h-6 w-6 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen fade-in">
+          {/* Header */}
+          <header className="bg-white border-b border-slate-200">
+            <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+              <h1 className="text-lg font-bold text-slate-800">Todo App</h1>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-400 hidden sm:inline">{userEmail}</span>
+                <Button variant="ghost" size="sm" onClick={onLogout}>
+                  Logout
+                </Button>
+              </div>
+            </div>
+          </header>
+
+          {/* Main */}
+          <main className="max-w-lg mx-auto px-4 py-6">
+            {/* Add todo */}
+            <div className="flex gap-2 mb-6">
+              <input
+                ref={inputRef}
+                type="text"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="What needs to be done?"
+                disabled={adding}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 disabled:bg-slate-50"
+              />
+              <Button onClick={addTodo} loading={adding} disabled={!newTitle.trim()}>
+                Add
+              </Button>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600 flex items-center justify-between">
+                <span>{error}</span>
+                <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            {/* Todo list */}
+            {todos.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-slate-300 mb-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <p className="text-sm text-slate-400">No todos yet. Add one above.</p>
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {todos.map(todo => (
+                  <li
+                    key={todo.id}
+                    className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white hover:shadow-sm transition-all border border-transparent hover:border-slate-200"
+                  >
+                    <button
+                      onClick={() => toggleTodo(todo)}
+                      className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        todo.completed
+                          ? 'bg-slate-700 border-slate-700'
+                          : 'border-slate-300 hover:border-slate-400'
+                      }`}
+                      aria-label={todo.completed ? 'Mark as incomplete' : 'Mark as complete'}
+                    >
+                      {todo.completed && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </button>
+                    <span className={`flex-1 text-sm ${todo.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                      {todo.title}
+                    </span>
+                    <button
+                      onClick={() => deleteTodo(todo.id)}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"
+                      aria-label="Delete todo"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Footer count */}
+            {todos.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-400 text-center">
+                {todos.filter(t => !t.completed).length} remaining / {todos.length} total
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [authed, setAuthed] = useState(false);
+      const [userEmail, setUserEmail] = useState('');
+      const [checking, setChecking] = useState(true);
+
+      useEffect(() => {
+        const token = localStorage.getItem('token');
+        const email = localStorage.getItem('email');
+        if (token && email) {
+          // Verify token by fetching todos
+          apiFetch('/api/todos')
+            .then(() => {
+              setUserEmail(email);
+              setAuthed(true);
+            })
+            .catch(() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('email');
+            })
+            .finally(() => setChecking(false));
+        } else {
+          setChecking(false);
+        }
+      }, []);
+
+      const handleAuthSuccess = useCallback((email) => {
+        setUserEmail(email);
+        setAuthed(true);
+      }, []);
+
+      const handleLogout = useCallback(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('email');
+        setAuthed(false);
+        setUserEmail('');
+      }, []);
+
+      if (checking) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <svg className="animate-spin h-6 w-6 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        );
+      }
+
+      return authed
+        ? <TodoScreen userEmail={userEmail} onLogout={handleLogout} />
+        : <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
