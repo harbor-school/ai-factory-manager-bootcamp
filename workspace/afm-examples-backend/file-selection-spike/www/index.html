@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>파일 선택</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [files, setFiles] = useState([]);
+      const [folderName, setFolderName] = useState('');
+      const [isNative, setIsNative] = useState(false);
+      const [error, setError] = useState('');
+
+      useEffect(() => {
+        setIsNative(
+          window.Capacitor && window.Capacitor.isNativePlatform()
+        );
+      }, []);
+
+      const handleSelectFolder = async () => {
+        setError('');
+
+        if (isNative) {
+          try {
+            const FilePicker = window.Capacitor.Plugins.FilePicker;
+            const result = await FilePicker.pickFiles({
+              multiple: true,
+              readData: true,
+            });
+
+            if (result.files && result.files.length > 0) {
+              setFolderName('선택된 파일');
+              const entries = result.files.map(f => {
+                const isImage = f.mimeType && f.mimeType.startsWith('image/');
+                let previewUrl = null;
+                if (isImage && f.data) {
+                  previewUrl = `data:${f.mimeType};base64,${f.data}`;
+                } else if (isImage && f.path) {
+                  previewUrl = window.Capacitor.convertFileSrc(f.path);
+                }
+                return {
+                  name: f.name || f.path?.split('/').pop() || '알 수 없음',
+                  kind: 'file',
+                  size: f.size,
+                  mimeType: f.mimeType,
+                  previewUrl,
+                };
+              });
+              setFiles(entries);
+            }
+          } catch (e) {
+            if (e.message && e.message.includes('cancel')) {
+              // user cancelled
+            } else {
+              setError('파일 선택 중 오류: ' + (e.message || e));
+            }
+          }
+        } else if (window.showDirectoryPicker) {
+          try {
+            const dirHandle = await window.showDirectoryPicker();
+            setFolderName(dirHandle.name);
+            const entries = [];
+            for await (const [name, handle] of dirHandle.entries()) {
+              entries.push({ name, kind: handle.kind });
+            }
+            entries.sort((a, b) => {
+              if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            });
+            setFiles(entries);
+          } catch (e) {
+            // user cancelled
+          }
+        } else {
+          document.getElementById('folderInput').click();
+        }
+      };
+
+      const handleFallback = (e) => {
+        const fileList = Array.from(e.target.files);
+        if (fileList.length === 0) return;
+        const pathParts = fileList[0].webkitRelativePath.split('/');
+        setFolderName(pathParts[0] || '선택된 폴더');
+        const entries = fileList.map(f => {
+          const isImage = f.type && f.type.startsWith('image/');
+          return {
+            name: f.webkitRelativePath.split('/').slice(1).join('/'),
+            kind: 'file',
+            size: f.size,
+            mimeType: f.type,
+            previewUrl: isImage ? URL.createObjectURL(f) : null,
+          };
+        });
+        setFiles(entries);
+      };
+
+      const formatSize = (bytes) => {
+        if (!bytes) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      };
+
+      return (
+        <div className="max-w-xl mx-auto px-4 py-10">
+          <h1 className="text-xl font-semibold text-gray-800 mb-2">파일 탐색기</h1>
+          <p className="text-xs text-gray-400 mb-6">
+            {isNative ? '네이티브 모드 (Capacitor)' : '웹 모드'}
+          </p>
+
+          <button
+            onClick={handleSelectFolder}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition text-sm font-medium"
+          >
+            {isNative ? '파일 선택' : '폴더 선택'}
+          </button>
+
+          <input
+            id="folderInput"
+            type="file"
+            webkitdirectory=""
+            className="hidden"
+            onChange={handleFallback}
+          />
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {folderName && (
+            <div className="mt-6">
+              <p className="text-sm text-gray-500 mb-3">
+                <span className="font-medium text-gray-700">{folderName}</span> — {files.length}개 항목
+              </p>
+              <ul className="border rounded-lg divide-y bg-white">
+                {files.map((f, i) => (
+                  <li key={i} className="px-4 py-2.5">
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <span className="text-base">{f.kind === 'directory' ? '\uD83D\uDCC1' : '\uD83D\uDCC4'}</span>
+                      <span className="truncate flex-1">{f.name}</span>
+                      {f.size && (
+                        <span className="text-xs text-gray-400 shrink-0">{formatSize(f.size)}</span>
+                      )}
+                    </div>
+                    {f.previewUrl && (
+                      <img
+                        src={f.previewUrl}
+                        alt={f.name}
+                        className="mt-2 rounded-lg max-h-48 object-contain bg-gray-100"
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

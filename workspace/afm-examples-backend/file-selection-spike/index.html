@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>폴더 선택</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    function App() {
+      const [files, setFiles] = useState([]);
+      const [folderName, setFolderName] = useState('');
+
+      const handleSelectFolder = async () => {
+        if (window.showDirectoryPicker) {
+          try {
+            const dirHandle = await window.showDirectoryPicker();
+            setFolderName(dirHandle.name);
+            const entries = [];
+            for await (const [name, handle] of dirHandle.entries()) {
+              entries.push({ name, kind: handle.kind });
+            }
+            entries.sort((a, b) => {
+              if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+              return a.name.localeCompare(b.name);
+            });
+            setFiles(entries);
+          } catch (e) {
+            // user cancelled
+          }
+        } else {
+          document.getElementById('folderInput').click();
+        }
+      };
+
+      const handleFallback = (e) => {
+        const fileList = Array.from(e.target.files);
+        if (fileList.length === 0) return;
+        const pathParts = fileList[0].webkitRelativePath.split('/');
+        setFolderName(pathParts[0] || '선택된 폴더');
+        const entries = fileList.map(f => ({
+          name: f.webkitRelativePath.split('/').slice(1).join('/'),
+          kind: 'file',
+        }));
+        setFiles(entries);
+      };
+
+      return (
+        <div className="max-w-xl mx-auto px-4 py-10">
+          <h1 className="text-xl font-semibold text-gray-800 mb-6">파일 탐색기</h1>
+
+          <button
+            onClick={handleSelectFolder}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+          >
+            폴더 선택
+          </button>
+
+          <input
+            id="folderInput"
+            type="file"
+            webkitdirectory=""
+            className="hidden"
+            onChange={handleFallback}
+          />
+
+          {folderName && (
+            <div className="mt-6">
+              <p className="text-sm text-gray-500 mb-3">
+                <span className="font-medium text-gray-700">{folderName}</span> — {files.length}개 항목
+              </p>
+              <ul className="border rounded-lg divide-y bg-white">
+                {files.map((f, i) => (
+                  <li key={i} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700">
+                    <span className="text-base">{f.kind === 'directory' ? '📁' : '📄'}</span>
+                    <span className="truncate">{f.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
